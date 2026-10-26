@@ -1,9 +1,11 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
 
-// ÐŸÑ€Ð¾Ñ„Ð¸Ð»Ð¸ Ñ€ÐµÐ³Ð¸Ð¾Ð½Ð¾Ð² Ð¾Ð±Ñ‰Ð¸Ðµ Ñ Windows-Ð²ÐµÑ€ÑÐ¸ÐµÐ¹: core/regions.json ÐºÐ¾Ð¿Ð¸Ñ€ÑƒÐµÑ‚ÑÑ Ð² assets Ð¿Ñ€Ð¸ ÑÐ±Ð¾Ñ€ÐºÐµ
+// Профили регионов общие с Windows-версией: core/regions.json копируется в assets при сборке
 val sharedAssets = layout.buildDirectory.dir("sharedAssets")
 val copyRegions by tasks.registering(Copy::class) {
     from(rootProject.file("../core/regions.json"))
@@ -16,13 +18,13 @@ android {
 
     defaultConfig {
         applicationId = "org.obhod.app"
-        minSdk = 29 // hev-socks5-tunnel.aar Ñ‚Ñ€ÐµÐ±ÑƒÐµÑ‚ Android 10+
+        minSdk = 29 // hev-socks5-tunnel.aar требует Android 10+
         targetSdk = 35
-        versionCode = 4
+        versionCode = 5
         versionName = "0.4"
     }
 
-    // ÐžÑ‚Ð´ÐµÐ»ÑŒÐ½Ñ‹Ð¹ APK Ð½Ð° Ð°Ñ€Ñ…Ð¸Ñ‚ÐµÐºÑ‚ÑƒÑ€Ñƒ: sing-box Ð²ÐµÑÐ¸Ñ‚ ~27 ÐœÐ‘ Ð½Ð° ÐºÐ°Ð¶Ð´ÑƒÑŽ, Ð¾Ð±Ñ‰Ð¸Ð¹ APK Ð²Ñ‹ÑˆÐµÐ» Ð±Ñ‹ Ð²Ð´Ð²Ð¾Ðµ Ð±Ð¾Ð»ÑŒÑˆÐµ
+    // Отдельный APK на архитектуру: sing-box весит ~27 МБ на каждую, общий APK вышел бы вдвое больше
     splits {
         abi {
             isEnable = true
@@ -32,15 +34,30 @@ android {
         }
     }
 
+    // Постоянный ключ релизов лежит вне git: <корень репозитория>/keys/keystore.properties.
+    // Нет файла (сборка из исходников у другого человека) — подписываем отладочным ключом.
+    val releaseProps = rootProject.file("../../keys/keystore.properties")
+    signingConfigs {
+        if (releaseProps.exists()) {
+            val p = Properties().apply { releaseProps.inputStream().use { load(it) } }
+            create("release") {
+                storeFile = releaseProps.parentFile.resolve(p.getProperty("storeFile"))
+                storePassword = p.getProperty("storePassword")
+                keyAlias = p.getProperty("keyAlias")
+                keyPassword = p.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("debug") // Ñ‡ÐµÑ€Ð½Ð¾Ð²Ð¸Ðº: Ð¿Ð¾Ð´Ð¿Ð¸ÑÑŒ Ð¾Ñ‚Ð»Ð°Ð´Ð¾Ñ‡Ð½Ñ‹Ð¼ ÐºÐ»ÑŽÑ‡Ð¾Ð¼
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 
-    // sing-box Ð¸ ByeDPI Ð»ÐµÐ¶Ð°Ñ‚ Ð² jniLibs ÐºÐ°Ðº lib*.so: Ñ‚Ð¾Ð»ÑŒÐºÐ¾ Ð¸Ð· nativeLibraryDir Android Ñ€Ð°Ð·Ñ€ÐµÑˆÐ°ÐµÑ‚ Ð¸Ñ… Ð·Ð°Ð¿ÑƒÑÐºÐ°Ñ‚ÑŒ
+    // sing-box и ByeDPI лежат в jniLibs как lib*.so: только из nativeLibraryDir Android разрешает их запускать
     packaging { jniLibs { useLegacyPackaging = true } }
 
     sourceSets["main"].assets.srcDir(sharedAssets)
@@ -58,5 +75,5 @@ tasks.named("preBuild") { dependsOn(copyRegions) }
 dependencies {
     implementation(files("libs/hev-socks5-tunnel.aar"))
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.json:json:20240303") // Ð² unit-Ñ‚ÐµÑÑ‚Ð°Ñ… android.jar Ð¾Ñ‚Ð´Ð°Ñ‘Ñ‚ Ð·Ð°Ð³Ð»ÑƒÑˆÐºÐ¸ org.json
+    testImplementation("org.json:json:20240303") // в unit-тестах android.jar отдаёт заглушки org.json
 }
