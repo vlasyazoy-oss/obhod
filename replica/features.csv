@@ -1,0 +1,51 @@
+feature,area,priority,original,clone,notes
+Одна кнопка «Подключить» и статус соединения,core,must,yes,yes,S01: карточка статуса и стоп-кнопки
+Локальный обход DPI (split / disorder / fake / OOB),engine,must,yes,yes,у них winws/winws2 + WinDivert; у нас ByeDPI
+TUN-режим: VpnService на Android и Wintun на Windows,engine,must,yes,partial,у них только перехват WinDivert на Windows; есть в Hiddify
+Региональные профили: Россия / Турция / Иран / Китай,regions,must,no,yes,у них только Россия; главная наша фишка
+Автоопределение региона (SIM MCC / часовой пояс / язык / GeoIP / ASN),regions,must,no,partial,GeoIP может быть заблокирован; нужны запасные источники
+Правила по сервисам: группа доменов → напрямую / через обход DPI / через прокси,routing,must,yes,yes,их Profile внутри Preset; у нас плюс ветка «прокси»
+Встроенные списки доменов и подсетей по сервисам,routing,must,yes,partial,lists/: собрать свои; их файлы не копировать
+Импорт ключа: vless / hy2 / trojan / ss по ссылке,proxy,must,yes,yes,у оригинала прокси по ключу нет; есть в Hiddify
+Импорт подписки по URL,proxy,must,yes,yes,есть в Hiddify
+Импорт ключа по QR-коду,proxy,must,yes,yes,есть в Hiddify
+Через ключ идёт всё заблокированное по IP,proxy,must,yes,yes,обязательно для Китая и Ирана; есть в Hiddify
+Автозапуск вместе с системой,core,must,yes,yes,S01: автозапуск GUI и автозапуск DPI
+Работа в фоне: трей на Windows и постоянное уведомление на Android,core,must,yes,partial,S14
+Автоподбор стратегии одной кнопкой (как blockcheck),strategies,must,partial,yes,у них отдельный экран S08 и ручной перенос результата
+Запоминать рабочую стратегию для провайдера (ASN),strategies,must,no,no,у них стратегия общая для всех сетей
+Шифрованный DNS (DoH / DoT) встроенный,dns,must,partial,yes,у них S05 меняет системный DNS
+Просмотр логов с ограничением размера,diagnostics,must,yes,yes,у оригинала лог разрастается до 1 ГБ — не повторять
+Ручной выбор стратегии с отметками «работает / не работает»,strategies,should,yes,partial,S03; у нас со скрытием в «Расширенных»
+Каталог стратегий с описаниями,strategies,should,yes,no,формат INI [id] name description args — хорошая идея; наш формат JSON
+Подписанные обновления базы стратегий без обновления приложения,strategies,should,no,no,minisign; отдельный репозиторий
+Редактирование списков доменов пользователем,routing,should,yes,no,
+Исключения: местные сайты мимо обхода и прокси,routing,should,partial,yes,у них ipset-exclude; у нас geoip/geosite страны
+Раздельное туннелирование по приложениям (Android),routing,should,yes,no,есть в Hiddify
+Локальный SOCKS / HTTP-прокси для других приложений и deeplink в Telegram,proxy,should,yes,no,S07: у них только для Telegram
+Автообновление приложения,core,should,yes,no,у них полный установщик; у нас GitHub Releases
+Тёмная и светлая тема,ui,should,yes,partial,S10; есть в Hiddify
+Языки интерфейса: ru / en / fa / tr / zh,ui,should,yes,no,у них только ru; есть в Hiddify
+Проверка доступности конкретного сайта,diagnostics,should,yes,partial,S08
+Живое автопереключение стратегий при сбоях (оркестратор),strategies,could,yes,no,их режим circular + детектор блокировок
+Режим winws (WinDivert) на Windows для сильных стратегий,engine,could,yes,no,fake с TTL и seqovl на пакетном уровне
+Анализ лога движка,diagnostics,could,yes,no,S09
+Редактор hosts,dns,could,yes,no,S06
+Поиск по настройкам,ui,could,yes,no,шапка
+Редактор своих стратегий (аргументы),strategies,could,yes,no,S03
+Анонимные отчёты «сработало / нет» по согласию,strategies,could,no,no,
+Отключение Windows Defender,system tweaks,skip,yes,skip,снижает безопасность пользователя
+Блокировка установки мессенджера MAX,system tweaks,skip,yes,skip,политический твик под одну страну
+Блокировка госСМИ,system tweaks,skip,yes,skip,к обходу блокировок не относится
+Платный уровень и донат-темы,monetization,skip,yes,skip,наш проект open source без платных функций
+Их пресеты / каталоги / .bin-блобы / Lua-скрипты как есть,content,skip,yes,skip,авторство GUI-каталогов не проверено; собираем свою базу
+Переименованный драйвер WinDivert,engine,skip,yes,skip,маскировка драйвера; используем Wintun и официальный WinDivert
+Импорт ключа из буфера обмена в 1 клик,proxy,must,yes,yes,Hiddify H01a
+Режим системного прокси без прав администратора,engine,must,yes,yes,Hiddify H05: только прокси-служба
+Карточка профиля: трафик и срок подписки,proxy,should,yes,no,Hiddify H01; из заголовка subscription-userinfo
+Фрагментация TLS Hello для трафика к прокси,proxy,should,yes,yes,Hiddify H04
+Проверка задержки серверов и автовыбор лучшего,proxy,should,yes,no,Hiddify: urltest и балансировщик
+Прямой маршрут для сайтов своей страны,routing,should,yes,yes,Hiddify H03: регион
+WARP (Cloudflare) как бесплатный выход,proxy,could,yes,no,Hiddify H02; требует регистрации в WARP
+Аналитика включена по умолчанию,privacy,skip,yes,skip,у нас аналитика только по согласию
+Бесплатные конфиги из каталога Hiddify,content,skip,yes,skip,их серверная сеть не часть продукта

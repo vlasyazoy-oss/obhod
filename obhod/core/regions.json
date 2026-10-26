@@ -1,0 +1,107 @@
+{
+  "ru": {
+    "name": "Россия",
+    "dpi_supported": true,
+    "doh": "1.1.1.1",
+    "resolve_dpi_via_doh": false,
+    "proxy_tls_fragment": true,
+    "domestic_suffixes": ["ru", "xn--p1ai", "su", "yandex.net", "vk.com", "userapi.com", "mail.ru", "gosuslugi.ru"],
+    "dpi_domains": [
+      "youtube.com", "youtu.be", "googlevideo.com", "ytimg.com", "ggpht.com", "youtube-nocookie.com", "yt.be",
+      "discord.com", "discord.gg", "discordapp.com", "discordapp.net", "discord.media", "discordcdn.com", "discord.co",
+      "x.com", "twitter.com", "twimg.com", "t.co",
+      "instagram.com", "cdninstagram.com", "facebook.com", "fbcdn.net", "fb.com",
+      "rutracker.org", "rutracker.cc", "linkedin.com", "licdn.com", "medium.com",
+      "signal.org", "soundcloud.com", "sndcdn.com", "patreon.com", "proton.me", "torproject.org"
+    ],
+    "proxy_domains": [
+      "chatgpt.com", "openai.com", "oaistatic.com", "oaiusercontent.com",
+      "claude.ai", "anthropic.com", "gemini.google.com", "aistudio.google.com",
+      "notion.so", "spotify.com", "netflix.com"
+    ],
+    "test_urls": ["https://www.youtube.com/", "https://i.ytimg.com/", "https://discord.com/", "https://x.com/"],
+    "strategies": [
+      {"id": "ru-disorder-tlsrec", "name": "disorder + разрез TLS-записи", "args": ["--disorder", "1", "--tlsrec", "1+s"]},
+      {"id": "ru-split-sni", "name": "split по SNI + disorder", "args": ["--split", "1+s", "--disorder", "3+s", "--tlsrec", "1+s"]},
+      {"id": "ru-fake-ttl", "name": "fake с низким TTL", "args": ["--fake", "1", "--ttl", "8", "--tlsrec", "3+s"]},
+      {"id": "ru-oob", "name": "OOB-байт + TLS-запись", "args": ["--oob", "1+s", "--tlsrec", "1+s"]},
+      {"id": "ru-disoob", "name": "disoob + split", "args": ["--disoob", "1", "--split", "1+s"]},
+      {"id": "ru-auto-chain", "name": "цепочка с автопереключением", "args": ["--disorder", "1", "--auto", "torst,ssl_err", "--fake", "1", "--ttl", "6", "--auto", "torst,ssl_err", "--oob", "1+s"]}
+    ]
+  },
+  "tr": {
+    "name": "Турция",
+    "dpi_supported": true,
+    "doh": "1.1.1.1",
+    "resolve_dpi_via_doh": true,
+    "proxy_tls_fragment": false,
+    "domestic_suffixes": ["tr", "gov.tr", "turkiye.gov.tr"],
+    "dpi_domains": [
+      "discord.com", "discord.gg", "discordapp.com", "discordapp.net", "discord.media", "discordcdn.com",
+      "x.com", "twitter.com", "twimg.com",
+      "instagram.com", "cdninstagram.com", "roblox.com", "rbxcdn.com", "wattpad.com",
+      "imgur.com", "pastebin.com", "archive.org", "proton.me", "signal.org", "torproject.org"
+    ],
+    "proxy_domains": [],
+    "test_urls": ["https://discord.com/", "https://www.roblox.com/", "https://x.com/"],
+    "strategies": [
+      {"id": "tr-tlsrec", "name": "разрез TLS-записи по SNI", "args": ["--tlsrec", "1+s"]},
+      {"id": "tr-split-tlsrec", "name": "split + TLS-запись", "args": ["--split", "1+s", "--tlsrec", "1+s"]},
+      {"id": "tr-disorder", "name": "disorder", "args": ["--disorder", "1+s"]},
+      {"id": "tr-fake", "name": "fake с низким TTL", "args": ["--fake", "1", "--ttl", "5", "--split", "1+s"]}
+    ]
+  },
+  "ir": {
+    "name": "Иран",
+    "dpi_supported": true,
+    "dpi_note": "Обход DPI в Иране помогает частично: многие сервисы заблокированы по IP. Для надёжной работы нужен ключ.",
+    "doh": null,
+    "resolve_dpi_via_doh": false,
+    "proxy_tls_fragment": true,
+    "domestic_suffixes": ["ir", "aparat.com", "digikala.com", "snapp.ir"],
+    "dpi_domains": [
+      "youtube.com", "googlevideo.com", "ytimg.com", "ggpht.com",
+      "instagram.com", "cdninstagram.com", "x.com", "twitter.com", "twimg.com",
+      "telegram.org", "t.me", "whatsapp.com", "whatsapp.net", "wikipedia.org"
+    ],
+    "proxy_domains": [
+      "telegram.org", "t.me", "web.telegram.org", "youtube.com", "googlevideo.com",
+      "instagram.com", "cdninstagram.com", "x.com", "twitter.com", "chatgpt.com", "openai.com"
+    ],
+    "test_urls": ["https://www.wikipedia.org/", "https://www.youtube.com/", "https://x.com/"],
+    "strategies": [
+      {"id": "ir-tlsrec-split", "name": "TLS-запись + split", "args": ["--tlsrec", "1+s", "--split", "2"]},
+      {"id": "ir-disorder", "name": "disorder по SNI", "args": ["--disorder", "1+s", "--tlsrec", "1+s"]},
+      {"id": "ir-fake", "name": "fake с низким TTL", "args": ["--fake", "1", "--ttl", "6", "--tlsrec", "1+s"]}
+    ]
+  },
+  "cn": {
+    "name": "Китай",
+    "dpi_supported": false,
+    "dpi_note": "В Китае заблокированы сами IP-адреса сервисов, локальный обход DPI не помогает. Нужен ключ (лучше VLESS+Reality или Hysteria2).",
+    "doh": "223.5.5.5",
+    "resolve_dpi_via_doh": false,
+    "proxy_tls_fragment": false,
+    "domestic_suffixes": ["cn", "baidu.com", "qq.com", "weixin.qq.com", "taobao.com", "alipay.com", "bilibili.com", "jd.com", "163.com", "aliyun.com"],
+    "dpi_domains": [],
+    "proxy_domains": [],
+    "test_urls": [],
+    "strategies": []
+  },
+  "other": {
+    "name": "Другая страна",
+    "dpi_supported": true,
+    "doh": "1.1.1.1",
+    "resolve_dpi_via_doh": true,
+    "proxy_tls_fragment": false,
+    "domestic_suffixes": [],
+    "dpi_domains": ["youtube.com", "googlevideo.com", "ytimg.com", "discord.com", "discordapp.com", "discord.gg", "x.com", "twitter.com", "twimg.com", "instagram.com", "cdninstagram.com", "telegram.org", "t.me"],
+    "proxy_domains": [],
+    "test_urls": ["https://www.youtube.com/", "https://discord.com/"],
+    "strategies": [
+      {"id": "gen-tlsrec", "name": "разрез TLS-записи", "args": ["--tlsrec", "1+s"]},
+      {"id": "gen-disorder", "name": "disorder + TLS-запись", "args": ["--disorder", "1", "--tlsrec", "1+s"]},
+      {"id": "gen-fake", "name": "fake с низким TTL", "args": ["--fake", "1", "--ttl", "8"]}
+    ]
+  }
+}

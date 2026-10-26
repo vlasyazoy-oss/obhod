@@ -1,0 +1,3 @@
+pillow>=10
+pystray>=0.19
+zxing-cpp>=2.2
