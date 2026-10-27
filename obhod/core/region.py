@@ -1,9 +1,15 @@
-"""Определение региона без сети: часовой пояс Windows, затем язык системы. По IP — только по нажатию."""
+"""Определение региона без сети: часовой пояс, затем язык системы. По IP — только по нажатию.
+
+Windows отдаёт свои имена поясов (tzutil), macOS — имена IANA (Europe/Istanbul) через /etc/localtime.
+"""
 import ctypes
+import locale
+import os
 import subprocess
 import urllib.request
 
 from .engine import NO_WINDOW
+from .osinfo import MAC
 
 TIMEZONES = {
     "Russian Standard Time": "ru", "Kaliningrad Standard Time": "ru", "Russia Time Zone 3": "ru",
@@ -17,10 +23,32 @@ TIMEZONES = {
     "Iran Standard Time": "ir",
     "China Standard Time": "cn",
 }
+# Те же страны в именах IANA (macOS, Linux, Android)
+IANA = {
+    "Europe/Istanbul": "tr", "Asia/Istanbul": "tr", "Turkey": "tr",
+    "Asia/Tehran": "ir", "Iran": "ir",
+    "Asia/Shanghai": "cn", "Asia/Urumqi": "cn", "Asia/Chongqing": "cn", "Asia/Harbin": "cn", "PRC": "cn",
+    **{z: "ru" for z in (
+        "Europe/Moscow", "Europe/Kaliningrad", "Europe/Samara", "Europe/Volgograd", "Europe/Saratov",
+        "Europe/Ulyanovsk", "Europe/Astrakhan", "Europe/Kirov", "Asia/Yekaterinburg", "Asia/Omsk",
+        "Asia/Novosibirsk", "Asia/Barnaul", "Asia/Tomsk", "Asia/Novokuznetsk", "Asia/Krasnoyarsk", "Asia/Irkutsk",
+        "Asia/Chita", "Asia/Yakutsk", "Asia/Khandyga", "Asia/Vladivostok", "Asia/Ust-Nera", "Asia/Magadan",
+        "Asia/Sakhalin", "Asia/Srednekolymsk", "Asia/Kamchatka", "Asia/Anadyr", "W-SU")},
+}
 LANGS = {"ru": "ru", "tr": "tr", "fa": "ir", "zh": "cn"}
 
 
+def iana_from_link(target):
+    """/var/db/timezone/zoneinfo/Europe/Istanbul → Europe/Istanbul"""
+    return target.split("zoneinfo/", 1)[1] if "zoneinfo/" in target else ""
+
+
 def _timezone():
+    if MAC:
+        try:
+            return iana_from_link(os.readlink("/etc/localtime"))
+        except OSError:
+            return ""
     try:
         r = subprocess.run(["tzutil", "/g"], capture_output=True, timeout=5, creationflags=NO_WINDOW)
         return r.stdout.decode(errors="replace").strip()
@@ -29,16 +57,29 @@ def _timezone():
 
 
 def _language():
+    if MAC:
+        try:
+            r = subprocess.run(["defaults", "read", "-g", "AppleLocale"], capture_output=True, text=True, timeout=5)
+            if r.stdout.strip():
+                return r.stdout.strip().replace("_", "-")  # ru_RU → ru-RU
+        except (OSError, subprocess.SubprocessError):
+            pass
+        return (locale.getlocale()[0] or "").replace("_", "-")
     buf = ctypes.create_unicode_buffer(85)
     ctypes.windll.kernel32.GetUserDefaultLocaleName(buf, 85)
     return buf.value  # например ru-RU
 
 
+def from_timezone(tz):
+    return TIMEZONES.get(tz) or IANA.get(tz)
+
+
 def detect_offline():
     """(код региона, откуда узнали)"""
     tz = _timezone()
-    if tz in TIMEZONES:
-        return TIMEZONES[tz], f"часовой пояс {tz}"
+    code = from_timezone(tz)
+    if code:
+        return code, f"часовой пояс {tz}"
     lang = _language()
     code = LANGS.get(lang.split("-")[0].lower())
     if code:

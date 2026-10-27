@@ -9,3 +9,7 @@ android/app/libs/
 android/app/src/main/jniLibs/
 android/.kotlin/
 dist/
+.venv/
+.venv-mac/
+build-mac/
+dist-mac/

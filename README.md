@@ -18,6 +18,7 @@ Open-source клиент для обхода блокировок с попра�
 | `Obhod-<версия>-windows.exe` | Windows 10/11, 64-бит |
 | `obhod-<версия>-android-arm64.apk` | Android 10+, обычные телефоны |
 | `obhod-<версия>-android-x86_64.apk` | эмуляторы и редкие x86-устройства |
+| macOS | пока только из исходников, в ветке `feature/macos` — см. [obhod/MACOS.md](obhod/MACOS.md) |
 | `SHA256SUMS.txt` | контрольные суммы файлов |
 
 ### Windows

@@ -4,6 +4,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core import config as cfg  # noqa: E402
+from core.osinfo import EXE  # noqa: E402
 
 PROXY = {"type": "trojan", "tag": "x", "server": "198.51.100.1", "server_port": 443, "password": "p",
          "tls": {"enabled": True, "server_name": "a.example"}}
@@ -105,7 +106,7 @@ class Build(unittest.TestCase):
         self.assertEqual([i["type"] for i in conf["inbounds"]], ["mixed", "tun"])
         rules = conf["route"]["rules"]
         self.assertTrue(any(r.get("action") == "hijack-dns" for r in rules))
-        self.assertIn({"process_name": ["ciadpi.exe"], "outbound": "direct"}, rules, "ciadpi не должен уходить в TUN по кругу")
+        self.assertIn({"process_name": ["ciadpi" + EXE], "outbound": "direct"}, rules, "ciadpi не должен уходить в TUN по кругу")
         tun = conf["inbounds"][1]
         self.assertTrue(all(":" not in a for a in tun["address"]), "без IPv6 на TUN: в сетях без IPv6 соединения рвались")
         self.assertEqual(conf["dns"].get("strategy"), "ipv4_only")

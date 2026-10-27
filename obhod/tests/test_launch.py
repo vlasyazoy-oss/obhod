@@ -6,6 +6,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core import autostart, emblem, keys, qr, tray  # noqa: E402
+from core.osinfo import MAC  # noqa: E402
 
 VLESS = ("vless://b831381d-6324-4d53-ad4f-8cda48b30811@203.0.113.5:443?type=tcp&security=reality"
          "&pbk=jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0&sid=ab12&sni=www.microsoft.com&fp=chrome#QR-ключ")
@@ -38,10 +39,12 @@ class QR(unittest.TestCase):
             Image.new("RGB", (200, 200), "white").save(blank)
             self.assertEqual(qr.from_file(blank), [])
 
+    @unittest.skipIf(MAC, "на macOS снимку экрана нужно разрешение «Запись экрана» — проверяется вручную")
     def test_screen_capture_runs(self):
         self.assertIsInstance(qr.from_screen(), list)
 
 
+@unittest.skipIf(MAC, "автозапуск Windows (реестр); macOS — tests/test_macos.py")
 class Autostart(unittest.TestCase):
     def test_command_uses_pythonw_and_tray_flag(self):
         cmd = autostart.command()

@@ -1,12 +1,13 @@
 """Обход — черновой клиент: обход DPI как у Zapret плюс VPN по своему ключу как у Hiddify.
 
-    py app.py           обычный запуск
-    py app.py --tray    свёрнутым в трей (так запускает автозапуск Windows)
+    py app.py           обычный запуск (на macOS: python3 app.py)
+    py app.py --tray    свёрнутым в трей (так запускает автозапуск); на macOS — свёрнутым в Dock
 """
 import ctypes
 import math
 import os
 import queue
+import subprocess
 import sys
 import threading
 import time
@@ -16,6 +17,7 @@ from tkinter import filedialog, messagebox, ttk
 from core import autostart, autotest, config as cfg, emblem, keys, qr, region as reg, sysproxy, tray
 from core.engine import DATA, Engine, EngineError, Log, missing_bins
 from core.fetch import FetchError, fetch
+from core.osinfo import MAC, font, mono
 from core.paths import BIN, launch_command
 from core.state import State
 
@@ -30,15 +32,23 @@ ACCENT, ACCENT_HI, OK, BAD = "#2f53b5", "#3a62cc", "#3ecf8e", "#ff6b6b"
 
 
 def is_admin():
+    if MAC:
+        return os.geteuid() == 0
     try:
         return bool(ctypes.windll.shell32.IsUserAnAdmin())
-    except OSError:
+    except (AttributeError, OSError):
         return False
 
 
 def flush_dns():
     """Очистить кэш DNS Windows (как ipconfig /flushdns, без прав администратора). Иначе программы ещё
     несколько минут ходят на подменённые провайдером адреса, полученные до включения TUN."""
+    if MAC:
+        try:
+            subprocess.run(["dscacheutil", "-flushcache"], capture_output=True, timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            pass
+        return
     try:
         ctypes.windll.dnsapi.DnsFlushResolverCache()
     except (AttributeError, OSError):
@@ -50,6 +60,8 @@ def already_running(wait=0.0):
 
     wait — сколько секунд ждать, пока прежний экземпляр закроется (перезапуск от администратора).
     """
+    if MAC:
+        return _locked_by_other()
     k32 = ctypes.windll.kernel32
     deadline = time.time() + wait
     while True:
@@ -60,6 +72,22 @@ def already_running(wait=0.0):
         if time.time() >= deadline:
             return True
         time.sleep(0.2)
+
+
+_lock_file = None
+
+
+def _locked_by_other():
+    """macOS: замок на data/obhod.lock держит первый экземпляр, пока он работает (снимается и при сбое)."""
+    global _lock_file
+    import fcntl
+    os.makedirs(DATA, exist_ok=True)
+    _lock_file = open(os.path.join(DATA, "obhod.lock"), "w")
+    try:
+        fcntl.flock(_lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return False
+    except OSError:
+        return True
 
 
 def relaunch_as_admin():
@@ -83,8 +111,9 @@ class App:
         self._reconnect_pending = False
 
         root.title("Обход — администратор" if is_admin() else "Обход")
-        # Размеры в «логических» пикселях: при масштабе Windows 125–150 % окно не должно сжиматься
-        self.k = root.winfo_fpixels("1i") / 96
+        # Размеры в «логических» пикселях: при масштабе Windows 125–150 % окно не должно сжиматься.
+        # На Mac Tk сам учитывает Retina, а дюйм у него 72 точки — там множитель не нужен
+        self.k = 1.0 if MAC else root.winfo_fpixels("1i") / 96
         height = min(self.px(820), root.winfo_screenheight() - self.px(70))
         root.geometry(f"{self.px(480)}x{height}")
         root.minsize(self.px(440), min(self.px(600), height))
@@ -112,13 +141,21 @@ class App:
         if missing_bins():
             self.log.write("obhod", "нет движков: " + ", ".join(missing_bins()))
             root.after(300, self.ensure_engines)
-        if not self.tray or not qr.available():
-            self.log.write("obhod", "трей и QR выключены: нет библиотек. Установите: py -m pip install --user -r requirements.txt")
+        if not qr.available() or (not self.tray and not MAC):
+            self.log.write("obhod", "трей или QR выключены: нет библиотек. Установите их: pip install -r requirements.txt")
         autostart.refresh()
-        if self.state.tun and not is_admin():
+        if MAC:
+            # Cmd+Q и «Завершить» в Dock: сначала вернуть системный прокси, иначе интернет пропадёт
+            root.createcommand("tk::mac::Quit", self.quit)
+            if self.state.tun:
+                self.state.tun = False  # TUN на macOS пока нет
+                self.state.save()
+        elif self.state.tun and not is_admin():
             root.after(400, self._offer_elevation)
         if start_hidden and self.tray:
             root.withdraw()
+        elif start_hidden and MAC:
+            root.iconify()
         if self.state.connect_on_start:
             root.after(500, self.toggle)
 
@@ -126,12 +163,12 @@ class App:
     def _style(self):
         s = ttk.Style()
         s.theme_use("clam")
-        s.configure(".", background=BG, foreground=FG, fieldbackground=CARD, font=("Segoe UI", 10))
+        s.configure(".", background=BG, foreground=FG, fieldbackground=CARD, font=font(10))
         s.configure("Card.TFrame", background=CARD)
         s.configure("Card.TLabel", background=CARD, foreground=FG)
-        s.configure("Muted.TLabel", background=CARD, foreground=MUTED, font=("Segoe UI", 9))
-        s.configure("H.TLabel", background=BG, foreground=FG, font=("Segoe UI Semibold", 16))
-        s.configure("Sub.TLabel", background=BG, foreground=MUTED, font=("Segoe UI", 9))
+        s.configure("Muted.TLabel", background=CARD, foreground=MUTED, font=font(9))
+        s.configure("H.TLabel", background=BG, foreground=FG, font=font(16, bold=True))
+        s.configure("Sub.TLabel", background=BG, foreground=MUTED, font=font(9))
         s.configure("TButton", background=CARD, foreground=FG, borderwidth=0, padding=(10, 6))
         s.map("TButton", background=[("active", "#2a2e37"), ("disabled", CARD)], foreground=[("disabled", MUTED)])
         s.configure("Accent.TButton", background=ACCENT, foreground="white")
@@ -173,7 +210,7 @@ class App:
                                 highlightthickness=0, cursor="hand2")
         self.canvas.pack()
         self.canvas.bind("<Button-1>", lambda e: self.toggle())
-        self.status = ttk.Label(mid, text="", style="Sub.TLabel", font=("Segoe UI Semibold", 10))
+        self.status = ttk.Label(mid, text="", style="Sub.TLabel", font=font(10, bold=True))
         self.status.pack(pady=(8, 0))
 
         # Всё, что ниже эмблемы, прокручивается: на ноутбуках с масштабом 150 % окно не помещается целиком
@@ -188,7 +225,9 @@ class App:
         inner = scroll.create_window((0, 0), window=body, anchor="nw")
         body.bind("<Configure>", lambda e: scroll.configure(scrollregion=scroll.bbox("all")))
         scroll.bind("<Configure>", lambda e: scroll.itemconfigure(inner, width=e.width - self.px(6)))
-        self.root.bind_all("<MouseWheel>", lambda e: scroll.yview_scroll(-e.delta // 120, "units"))
+        # Windows шлёт колесо шагами по 120, macOS — мелкими значениями (1, 2, 3…)
+        self.root.bind_all("<MouseWheel>",
+                           lambda e: scroll.yview_scroll(-(e.delta if MAC else e.delta // 120), "units"))
 
         # Регион
         c = self._card(body, "РЕГИОН")
@@ -218,7 +257,7 @@ class App:
         # Ключи
         c = self._card(body, "КЛЮЧИ И ПОДПИСКИ")
         self.key_list = tk.Listbox(c, height=3, bg=BG, fg=FG, selectbackground=ACCENT, borderwidth=0,
-                                   highlightthickness=0, activestyle="none", font=("Segoe UI", 10))
+                                   highlightthickness=0, activestyle="none", font=font(10))
         self.key_list.pack(fill="x")
         self.key_list.bind("<<ListboxSelect>>", self._on_key_select)
         row = ttk.Frame(c, style="Card.TFrame")
@@ -233,7 +272,7 @@ class App:
         ttk.Button(row, text="Удалить", command=self.delete_key).pack(side="right")
 
         # Стратегия
-        c = self._card(body, "ОБХОД DPI (BYEDPI)")
+        c = self._card(body, "ОБХОД DPI (SING-BOX)" if MAC else "ОБХОД DPI (BYEDPI)")
         row = ttk.Frame(c, style="Card.TFrame")
         row.pack(fill="x")
         self.strat_var = tk.StringVar()
@@ -246,20 +285,25 @@ class App:
         self.dpi_all_var = tk.BooleanVar()
         ttk.Checkbutton(c, text="Все сайты через обход DPI, не только из списка", variable=self.dpi_all_var,
                         command=self._on_options).pack(anchor="w", pady=(8, 0))
-        ttk.Checkbutton(c, text="TUN: весь трафик системы (нужны права администратора)", variable=self.tun_var,
-                        command=self._on_options).pack(anchor="w")
+        tun = ttk.Checkbutton(c, text="TUN: пока только в Windows-версии" if MAC else
+                              "TUN: весь трафик системы (нужны права администратора)",
+                              variable=self.tun_var, command=self._on_options)
+        tun.pack(anchor="w")
+        if MAC:
+            tun.state(["disabled"])
 
         # Запуск
         c = self._card(body, "ЗАПУСК")
         self.autostart_var = tk.BooleanVar()
         self.connect_on_start_var = tk.BooleanVar()
-        ttk.Checkbutton(c, text="Запускать вместе с Windows (свёрнутым в трей)", variable=self.autostart_var,
+        ttk.Checkbutton(c, text="Запускать при входе в macOS (свёрнутым в Dock)" if MAC else
+                        "Запускать вместе с Windows (свёрнутым в трей)", variable=self.autostart_var,
                         command=self._on_autostart).pack(anchor="w")
         ttk.Checkbutton(c, text="Подключаться сразу после запуска", variable=self.connect_on_start_var,
                         command=self._on_options).pack(anchor="w")
 
         # Журнал
-        self.log_box = tk.Text(body, height=6, bg=CARD, fg=MUTED, borderwidth=0, font=("Consolas", 8), wrap="word")
+        self.log_box = tk.Text(body, height=6, bg=CARD, fg=MUTED, borderwidth=0, font=mono(8), wrap="word")
         self.log_box.pack(fill="x")
         self.log_box.configure(state="disabled")
 
@@ -283,13 +327,17 @@ class App:
             m = "dpi"  # ключей не осталось — без ключа работает только обход DPI
         return m
 
+    def strategies(self):
+        """ByeDPI из профиля региона на Windows, встроенная фрагментация sing-box на macOS."""
+        return cfg.strategies(self.region())
+
     def strategy(self):
-        r = self.region()
         wanted = self.state.strategies.get(self.region_code())
-        for s in r["strategies"]:
+        options = self.strategies()
+        for s in options:
             if s["id"] == wanted:
                 return s
-        return r["strategies"][0] if r["strategies"] else None
+        return options[0] if options else None
 
     def _refresh_all(self):
         codes = ["auto", *self.regions]
@@ -307,7 +355,9 @@ class App:
         for code, b in self.mode_buttons.items():
             b.state(["!disabled"] if code == "vpn" or r["dpi_supported"] else ["disabled"])
         self.mode_hint.configure(text={
-            "dpi": "Сайты из списка региона идут через локальный ByeDPI, остальное напрямую. Сервер не нужен.",
+            "dpi": ("Сайты из списка региона идут с фрагментацией TLS (sing-box), остальное напрямую. "
+                    "Сервер не нужен." if MAC else
+                    "Сайты из списка региона идут через локальный ByeDPI, остальное напрямую. Сервер не нужен."),
             "vpn": "Весь трафик идёт через сервер по ключу, кроме сайтов своей страны и локальной сети.",
             "hybrid": "Обход DPI для сайтов из списка, ключ для заблокированного по IP, остальное напрямую.",
         }[self.mode()])
@@ -318,7 +368,7 @@ class App:
         if self.state.keys:
             self.key_list.selection_set(min(self.state.selected_key, len(self.state.keys) - 1))
 
-        strategies = r["strategies"]
+        strategies = self.strategies()
         self.strat_box["values"] = [s["name"] for s in strategies] or ["— не нужен в этом регионе —"]
         cur = self.strategy()
         self.strat_box.current(strategies.index(cur) if cur else 0)
@@ -354,9 +404,9 @@ class App:
         self._changed()
 
     def _on_strategy(self, _=None):
-        r = self.region()
-        if r["strategies"]:
-            self.state.strategies[self.region_code()] = r["strategies"][self.strat_box.current()]["id"]
+        options = self.strategies()
+        if options:
+            self.state.strategies[self.region_code()] = options[self.strat_box.current()]["id"]
         self._changed()
 
     def _on_options(self):
@@ -535,9 +585,11 @@ class App:
                                   "Снимите галочку TUN или включите её снова — Обход предложит перезапуск.")
         r = self.region()
         key = self.state.current_key()
+        strategy = self.strategy()
         conf = cfg.build(r, self.mode(), key["outbound"] if key else None, mixed_port=MIXED_PORT,
-                         dpi_port=DPI_PORT, tun=self.state.tun, dpi_all=self.state.dpi_all)
-        self.engine.start(conf, self.strategy(), DPI_PORT)
+                         dpi_port=DPI_PORT, tun=self.state.tun, dpi_all=self.state.dpi_all,
+                         singbox_dpi=strategy.get("singbox") if strategy else None)
+        self.engine.start(conf, strategy, DPI_PORT)
         if not self.state.tun:
             sysproxy.enable(MIXED_PORT)
         flush_dns()
@@ -644,9 +696,13 @@ class App:
         self.root.after(80 if self.busy else 150, self._poll)
 
     def close_window(self):
-        """Крестик прячет окно в трей, как у Hiddify; выход — из меню значка. Без трея — обычный выход."""
+        """Крестик прячет окно в трей, как у Hiddify; выход — из меню значка. На Mac — сворачивает в Dock
+        (выход — Cmd+Q). Без трея на Windows — обычный выход."""
         if not self.tray:
-            self.quit()
+            if MAC:
+                self.root.iconify()
+            else:
+                self.quit()
             return
         self.root.withdraw()
         if not self.state.tray_hint_shown:
@@ -677,11 +733,12 @@ def selftest():
         say(f"регион: {region['name']} ({how})")
         if not region["dpi_supported"]:
             say("в этом регионе обход DPI не работает — проверяю только запуск движков")
-        strategy = region["strategies"][0] if region["strategies"] else None
+        options = cfg.strategies(region)
+        strategy = options[0] if options else None
         mode = "dpi" if region["dpi_supported"] else None
         engine = Engine(Log())
         if mode:
-            conf = cfg.build(region, mode, mixed_port=2181, dpi_port=1181)
+            conf = cfg.build(region, mode, mixed_port=2181, dpi_port=1181, singbox_dpi=strategy.get("singbox"))
             engine.start(conf, strategy, 1181)
             say(f"подключено: {strategy['name']}")
             results = []
@@ -708,6 +765,12 @@ def main():
     except (AttributeError, OSError):
         pass
     if already_running(wait=8 if "--elevated" in sys.argv else 0):
+        if MAC:
+            root = tk.Tk()
+            root.withdraw()
+            messagebox.showinfo("Обход", "Обход уже запущен — его окно в Dock.")
+            root.destroy()
+            return
         ctypes.windll.user32.MessageBoxW(None, "Обход уже запущен — его значок в трее, рядом с часами.", "Обход", 0x40)
         return
     root = tk.Tk()

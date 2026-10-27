@@ -1,4 +1,7 @@
-"""Запуск и остановка движков: ciadpi (ByeDPI) и sing-box. Логи — в кольцевой буфер и файл с ограничением размера."""
+"""Запуск и остановка движков: ciadpi (ByeDPI) и sing-box. Логи — в кольцевой буфер и файл с ограничением размера.
+
+На macOS ByeDPI не нужен: обход DPI делает sing-box (фрагментация TLS-записей), см. config.SINGBOX_STRATEGIES.
+"""
 import collections
 import ctypes
 import json
@@ -10,10 +13,11 @@ import threading
 import time
 
 from . import config as cfg
-
+from .osinfo import EXE, MAC
 from .paths import BIN, DATA
-SING_BOX = os.path.join(BIN, "sing-box.exe")
-CIADPI = os.path.join(BIN, "ciadpi.exe")
+
+SING_BOX = os.path.join(BIN, "sing-box" + EXE)
+CIADPI = os.path.join(BIN, "ciadpi" + EXE)
 LOG_FILE = os.path.join(DATA, "obhod.log")
 LOG_LIMIT = 1_000_000  # байт; у Zapret логи разрастались до 1 ГБ
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -34,8 +38,12 @@ def physical_ip():
     return None if ip.startswith(TUN_NET) else ip
 
 
+def required_bins():
+    return [SING_BOX] if MAC else [SING_BOX, CIADPI]
+
+
 def missing_bins():
-    return [os.path.basename(p) for p in (SING_BOX, CIADPI) if not os.path.exists(p)]
+    return [os.path.basename(p) for p in required_bins() if not os.path.exists(p)]
 
 
 class Log:
@@ -152,6 +160,8 @@ class Engine:
 def kill_orphans():
     """Закрывает наши sing-box и ciadpi, которые остались без хозяина (сбой, гонка). Ищет по точному пути к файлу
     в нашей папке bin, поэтому sing-box других программ не трогает. Возвращает число закрытых процессов."""
+    if MAC:
+        return _kill_orphans_ps()
     k32 = ctypes.windll.kernel32
     ours = {os.path.normcase(os.path.abspath(p)) for p in (SING_BOX, CIADPI)}
     pids = (ctypes.c_uint32 * 4096)()
@@ -173,4 +183,28 @@ def kill_orphans():
                     killed += 1
         finally:
             k32.CloseHandle(h)
+    return killed
+
+
+def orphan_pids(ps_output, ours=None):
+    """PID наших движков из вывода `ps -axo pid=,comm=` (на macOS comm — полный путь к файлу)."""
+    ours = ours or {os.path.abspath(p) for p in (SING_BOX, CIADPI)}
+    pids = []
+    for line in ps_output.splitlines():
+        pid, _, path = line.strip().partition(" ")
+        if pid.isdigit() and int(pid) != os.getpid() and os.path.abspath(path.strip()) in ours:
+            pids.append(int(pid))
+    return pids
+
+
+def _kill_orphans_ps():
+    import signal
+    out = subprocess.run(["ps", "-axo", "pid=,comm="], capture_output=True, text=True).stdout
+    killed = 0
+    for pid in orphan_pids(out):
+        try:
+            os.kill(pid, signal.SIGTERM)
+            killed += 1
+        except OSError:
+            pass
     return killed
