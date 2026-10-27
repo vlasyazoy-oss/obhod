@@ -1,3 +1,15 @@
+<p align="center">
+  <img src="docs/banner.svg" alt="Обход — обход блокировок с поправкой на регион" width="100%">
+</p>
+
+<p align="center">
+  <a href="../../releases/latest"><img alt="версия" src="https://img.shields.io/github/v/release/vlasyazoy-oss/obhod?label=%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F&color=22408a&style=flat-square"></a>
+  <img alt="Windows" src="https://img.shields.io/badge/Windows-10%20%2F%2011-22408a?style=flat-square">
+  <img alt="Android" src="https://img.shields.io/badge/Android-10%2B-554452?style=flat-square">
+  <img alt="macOS" src="https://img.shields.io/badge/macOS-%D0%B1%D0%B5%D1%82%D0%B0-554452?style=flat-square">
+  <a href="LICENSE"><img alt="лицензия" src="https://img.shields.io/badge/%D0%BB%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F-GPL--3.0-16151b?style=flat-square"></a>
+</p>
+
 # Обход
 
 Open-source клиент для обхода блокировок с поправкой на регионы. Совмещает два подхода:
@@ -8,6 +20,23 @@ Open-source клиент для обхода блокировок с попра�
 Режим и стратегия подбираются под регион: Россия, Турция, Иран, Китай или другая страна.
 
 > **Статус: черновик.** Проверено вживую на Windows 11 и Android 15 в Турции. В других странах стратегии могут потребовать подстройки — для этого есть автоподбор.
+
+## Как выглядит
+
+<table>
+  <tr>
+    <th>Windows</th>
+    <th colspan="3">Android</th>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/windows.png" alt="Обход для Windows: эмблема, регион, режим, ключи, стратегия обхода DPI" width="300"></td>
+    <td valign="top"><img src="docs/android-home.jpg" alt="Android: главная — ключ и эмблема-кнопка" width="180"></td>
+    <td valign="top"><img src="docs/android-routing.jpg" alt="Android: маршрутизация — регион, режим, стратегия" width="180"></td>
+    <td valign="top"><img src="docs/android-settings.jpg" alt="Android: настройки — язык, журнал, батарея" width="180"></td>
+  </tr>
+</table>
+
+Нажмите на эмблему: глаза открыты — подключено. Ключи на скриншотах демонстрационные.
 
 ## Скачать
 

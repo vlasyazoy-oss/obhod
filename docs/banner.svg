@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360" role="img" aria-label="Обход — обход блокировок с поправкой на регион">
+  <rect width="1280" height="360" fill="#fff"/>
+  <polygon points="-481.3,0.0 600.4,0.0 600.4,77.5 518.2,118.4 518.2,241.6 600.4,282.5 600.4,360.0 -481.3,360.0" fill="#22408a"/>
+  <polygon points="679.6,0.0 3000.0,0.0 3000.0,360.0 679.6,360.0 679.6,283.3 763.6,241.6 763.6,118.4 679.6,76.7" fill="#554452"/>
+  <rect x="582.5" y="148.7" width="117.2" height="63.1" fill="#000"/>
+  <ellipse cx="596.5" cy="180.2" rx="24.7" ry="30.7" fill="#fff"/><circle cx="599.1" cy="180.2" r="14.5" fill="#000"/><ellipse cx="685.6" cy="180.2" rx="24.7" ry="30.7" fill="#fff"/><circle cx="683.0" cy="180.2" r="14.5" fill="#000"/>
+  <g font-family="'Segoe UI','Helvetica Neue',Helvetica,Arial,sans-serif" fill="#fff">
+    <text x="84" y="168" font-size="84" font-weight="700" letter-spacing="1">Обход</text>
+    <text x="88" y="214" font-size="22" opacity=".9">обход блокировок</text>
+    <text x="88" y="244" font-size="22" opacity=".9">с поправкой на регион</text>
+    <text x="1196" y="150" font-size="24" text-anchor="end" opacity=".95">обход DPI без сервера</text>
+    <text x="1196" y="184" font-size="24" text-anchor="end" opacity=".95">VPN по своему ключу</text>
+    <text x="1196" y="238" font-size="18" text-anchor="end" opacity=".75">Windows · Android · macOS β</text>
+  </g>
+</svg>
