@@ -2,9 +2,10 @@
 import base64
 import binascii
 import json
-import urllib.request
 from dataclasses import dataclass, field
 from urllib.parse import parse_qs, unquote, urlsplit
+
+from . import subscription
 
 SCHEMES = ("vless", "vmess", "trojan", "ss", "hy2", "hysteria2", "tuic")
 
@@ -253,12 +254,15 @@ def _from_singbox_json(text):
     return keys
 
 
-def fetch_subscription(url, timeout=15):
-    """Скачивает подписку напрямую. Возвращает (ключи, ошибки, userinfo)."""
-    req = urllib.request.Request(url, headers={"User-Agent": "obhod/0.1"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        body = r.read().decode("utf-8", "replace")
-        info = r.headers.get("subscription-userinfo", "")
+def fetch_subscription(url, timeout=15, pinned=None):
+    """Скачивает подписку. Возвращает (ключи, ошибки, userinfo).
+
+    Сертификат проверяется по хранилищу системы; не подтвердился — subscription.CertError с отпечатком.
+    pinned — отпечаток, которому пользователь уже разрешил доверять для этого сервера.
+    """
+    raw, headers = subscription.download(url, timeout, pinned)
+    body = raw.decode("utf-8", "replace")
+    info = headers.get("subscription-userinfo", "") or ""
     keys, errors = parse_many(body)
     userinfo = dict(p.strip().split("=", 1) for p in info.split(";") if "=" in p)
     return keys, errors, userinfo

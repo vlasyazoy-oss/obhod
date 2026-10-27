@@ -19,6 +19,7 @@ class State:
     dpi_all: bool = False
     connect_on_start: bool = False
     tray_hint_shown: bool = False
+    trusted_certs: dict = field(default_factory=dict)  # сервер подписки -> отпечаток, которому доверился пользователь
 
     @classmethod
     def load(cls):
