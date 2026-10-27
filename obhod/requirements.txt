@@ -1,3 +1,4 @@
 pillow>=10
 pystray>=0.19; sys_platform == "win32"
 zxing-cpp>=2.2
+truststore>=0.9

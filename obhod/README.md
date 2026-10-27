@@ -23,7 +23,7 @@ py app.py                                       # или py app.py --tray — с
 
 ```
 py -m pip install --user pyinstaller
-py -m PyInstaller --onefile --windowed --name Obhod --icon obhod.ico --add-data "core/regions.json;core" --hidden-import pystray._win32 --exclude-module numpy app.py
+py -m PyInstaller --onefile --windowed --name Obhod --icon obhod.ico --add-data "core/regions.json;core" --hidden-import pystray._win32 --hidden-import truststore --exclude-module numpy app.py
 ```
 
 - В exe нет движков (sing-box весит 82 МБ): при первом запуске он предлагает скачать их с GitHub в `%LOCALAPPDATA%\Obhodin`. Настройки и журнал лежат в `%LOCALAPPDATA%\Obhod\data`.
@@ -32,6 +32,7 @@ py -m PyInstaller --onefile --windowed --name Obhod --icon obhod.ico --add-data 
 
 ## Ключи
 
+- Подписки скачиваются с проверкой сертификата через хранилище Windows, как в браузере (`truststore`): корпоративные фильтры и антивирусы, которым доверяет система, не мешают. Если сертификат всё равно не подтверждён (самоподписанный у сервера), «Обход» показывает его отпечаток SHA-256 и спрашивает, доверять ли. Согласие запоминает отпечаток для этого сервера: другой сертификат снова вызовет вопрос.
 - **Вставить**: текст из буфера (ключ, несколько ключей, base64-подписка, JSON sing-box, ссылка на подписку). Если в буфере картинка, на ней ищется QR.
 - **QR с экрана**: окно прячется, снимаются все мониторы, найденные QR-коды импортируются. Можно открыть QR из Telegram или из панели провайдера и нажать кнопку.
 - **QR из файла**: картинка с QR-кодом.
