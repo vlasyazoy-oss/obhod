@@ -11,6 +11,7 @@ import sys
 import threading
 import time
 import tkinter as tk
+from urllib.parse import urlsplit
 from tkinter import filedialog, messagebox, ttk
 
 from core import autostart, autotest, config as cfg, emblem, keys, qr, region as reg, sysproxy, tray
@@ -18,6 +19,8 @@ from core.engine import DATA, Engine, EngineError, Log, missing_bins
 from core.fetch import FetchError, fetch
 from core.paths import BIN, launch_command
 from core.state import State
+from core.subscription import CertError, trusted_context
+from core.version import VERSION
 
 MIXED_PORT = 2080
 DPI_PORT = 1080
@@ -164,7 +167,7 @@ class App:
         head = ttk.Frame(outer)
         head.pack(fill="x", pady=(0, 8))
         ttk.Label(head, text="Обход", style="H.TLabel").pack(side="left")
-        ttk.Label(head, text="черновик 0.1", style="Sub.TLabel").pack(side="left", padx=8, pady=(6, 0))
+        ttk.Label(head, text=f"версия {VERSION}", style="Sub.TLabel").pack(side="left", padx=8, pady=(6, 0))
 
         # Эмблема — она же кнопка подключения
         mid = ttk.Frame(outer)
@@ -481,10 +484,45 @@ class App:
         for text in texts:
             text = text.strip()
             if text.startswith(("http://", "https://")):
-                self.log.write("obhod", "скачиваю подписку…")
-                self._in_thread(lambda t=text: self._add_keys(*keys.fetch_subscription(t)[:2], sub=t), busy=False)
+                self._fetch_sub(text)
             else:
                 self._add_keys(*keys.parse_many(text))
+
+    def _fetch_sub(self, url, pinned=None):
+        """Скачать подписку в фоне. Сертификат не подтвердился — спросить пользователя в главном потоке."""
+        pinned = pinned or self.state.trusted_certs.get(urlsplit(url).hostname or "")
+        self.log.write("obhod", "скачиваю подписку…")
+
+        def work():
+            try:
+                found, errors, _ = keys.fetch_subscription(url, pinned=pinned)
+            except CertError as e:
+                self.q.put(("cert", (url, e)))
+                return
+            self._add_keys(found, errors, sub=url)
+        self._in_thread(work, busy=False)
+
+    def _ask_cert(self, url, e):
+        """Сертификат сервера подписки не подтверждён: объяснить и дать решить. «Да» запоминает отпечаток —
+        подписка с другого (подменённого) сертификата снова вызовет этот вопрос."""
+        self.log.write("obhod", f"сертификат {e.host} не подтверждён: {e.reason}")
+        if not e.fingerprint:
+            messagebox.showerror("Обход", f"Не удалось проверить сервер подписки {e.host}: {e.reason}.", parent=self.root)
+            return
+        text = (f"Сервер подписки {e.host} не подтвердил свою подлинность:\n{e.reason.rstrip('.')}.\n\n"
+                "Так бывает, если у сервера самоподписанный сертификат или если сеть подменяет сертификаты "
+                "(корпоративный фильтр, антивирус).\n\n"
+                f"Отпечаток сертификата (SHA-256):\n{e.fingerprint}\n\n"
+                "Доверяйте, только если уверены в сервере — например, отпечаток совпадает с указанным в панели "
+                "вашего VPN. В подменённой подписке могут оказаться чужие ключи, и трафик уйдёт на чужой сервер.\n\n"
+                "Доверять этому сертификату и скачать подписку?")
+        if messagebox.askyesno("Обход — сертификат не подтверждён", text, icon="warning", default="no", parent=self.root):
+            self.state.trusted_certs[e.host] = e.fingerprint
+            self.state.save()
+            self.log.write("obhod", f"доверяю сертификату {e.host}: {e.fingerprint[:23]}…")
+            self._fetch_sub(url, pinned=e.fingerprint)
+        else:
+            self.log.write("obhod", "подписка не загружена: сертификат не подтверждён")
 
     def _add_keys(self, found, errors, sub=""):
         for e in errors:
@@ -608,6 +646,8 @@ class App:
                         self.state.selected_key = len(self.state.keys) - len(data)
                         self.log.write("obhod", f"добавлено ключей: {len(data)}")
                         self._changed()
+                elif kind == "cert":
+                    self._ask_cert(*data)
                 elif kind == "detected":
                     self.detected, self.detected_how = data
                     self.state.region = "auto"
@@ -669,7 +709,10 @@ def selftest():
     say = report.append
     ok = False
     try:
-        say(f"Обход selftest, {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        say(f"Обход {VERSION} selftest, {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        ctx = trusted_context()
+        say("проверка сертификатов подписок: " + ("хранилище системы (truststore)" if type(ctx).__module__.startswith("truststore")
+                                                  else "встроенная в Python"))
         say(f"движки: {BIN}\nнастройки: {DATA}")
         fetch(log=say)
         code, how = reg.detect_offline()
