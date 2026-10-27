@@ -10,6 +10,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core import autotest, config as cfg, keys  # noqa: E402
+from core.osinfo import MAC  # noqa: E402
 from core.engine import CIADPI, NO_WINDOW, SING_BOX, missing_bins  # noqa: E402
 
 REGIONS = cfg.load_regions()
@@ -108,6 +109,7 @@ class EndToEnd(unittest.TestCase):
         self.assertIn(b"h=www.cloudflare.com", r.stdout)
 
 
+    @unittest.skipIf(MAC, "ByeDPI на macOS не используется: обход DPI делает sing-box (tests/test_macos.py)")
     def test_dpi_mode_sends_listed_sites_to_byedpi_and_the_rest_direct(self):
         dpi_port, mixed_port = free_port(), free_port()
         strategy = REGIONS["ru"]["strategies"][0]
@@ -135,6 +137,7 @@ class EndToEnd(unittest.TestCase):
         self.assertRegex(text, r"outbound/direct\[direct\]: outbound connection to example\.com:443")
 
 
+@unittest.skipIf(MAC, "ByeDPI на macOS не используется: обход DPI делает sing-box (tests/test_macos.py)")
 @unittest.skipIf(missing_bins(), "нет движков в bin/")
 class NoOrphans(unittest.TestCase):
     """Быстрые переподключения подряд раньше оставляли «осиротевший» sing-box на порту со старой стратегией."""
@@ -185,6 +188,7 @@ class NoOrphans(unittest.TestCase):
             shutil.rmtree(foreign_dir, ignore_errors=True)
 
 
+@unittest.skipIf(MAC, "ByeDPI на macOS не используется: обход DPI делает sing-box (tests/test_macos.py)")
 @unittest.skipIf(missing_bins(), "нет движков в bin/")
 class ByeDpiStarts(unittest.TestCase):
     def test_bound_to_network_card_still_proxies(self):

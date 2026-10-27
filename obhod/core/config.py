@@ -3,8 +3,17 @@ import copy
 import json
 import os
 
+from .osinfo import EXE, MAC
 from .paths import RES
+
 MODES = {"dpi": "Обход DPI", "vpn": "VPN по ключу", "hybrid": "Гибрид"}
+
+# Обход DPI силами самого sing-box — для macOS, где нет ByeDPI. Фрагментация TLS-записей на живой сети в Турции
+# открывает Discord и Roblox так же, как ByeDPI с --tlsrec; фрагментация по TCP-сегментам там не помогла.
+SINGBOX_STRATEGIES = [
+    {"id": "sb-tlsrec", "name": "фрагментация TLS-записей (sing-box)", "singbox": {"tls_record_fragment": True}},
+    {"id": "sb-tcpfrag", "name": "фрагментация TCP-сегментов (sing-box)", "singbox": {"tls_fragment": True}},
+]
 
 
 class ConfigError(ValueError):
@@ -16,6 +25,13 @@ def load_regions(path=os.path.join(RES, "core", "regions.json")):
         return json.load(f)
 
 
+def strategies(region, mac=MAC):
+    """Стратегии обхода DPI для этой платформы: ByeDPI из профиля региона или встроенные в sing-box на macOS."""
+    if not region["dpi_supported"]:
+        return []
+    return SINGBOX_STRATEGIES if mac else region["strategies"]
+
+
 def default_mode(region, has_key):
     if not region["dpi_supported"]:
         return "vpn"
@@ -23,8 +39,11 @@ def default_mode(region, has_key):
 
 
 def build(region, mode, proxy_outbound=None, *, mixed_port=2080, dpi_port=1080, tun=False,
-          dpi_all=False, log_level="info"):
-    """Системный прокси sing-box не ставит: это делает core.sysproxy, чтобы его можно было снять даже после сбоя."""
+          dpi_all=False, log_level="info", singbox_dpi=None):
+    """Системный прокси sing-box не ставит: это делает core.sysproxy, чтобы его можно было снять даже после сбоя.
+
+    singbox_dpi — параметры route-options из SINGBOX_STRATEGIES: обход DPI делает сам sing-box, без ByeDPI.
+    """
     if mode not in MODES:
         raise ConfigError(f"неизвестный режим {mode}")
     uses_proxy = mode in ("vpn", "hybrid")
@@ -58,7 +77,7 @@ def build(region, mode, proxy_outbound=None, *, mixed_port=2080, dpi_port=1080, 
         dns["strategy"] = "ipv4_only"  # перехваченный DNS не отдаёт AAAA: программы сразу идут по IPv4
 
     outbounds = [{"type": "direct", "tag": "direct"}]
-    if uses_dpi:
+    if uses_dpi and not singbox_dpi:
         outbounds.append({"type": "socks", "tag": "dpi", "server": "127.0.0.1", "server_port": dpi_port, "version": "5"})
     if uses_proxy:
         ob = copy.deepcopy(proxy_outbound)
@@ -71,7 +90,7 @@ def build(region, mode, proxy_outbound=None, *, mixed_port=2080, dpi_port=1080, 
     rules = [{"action": "sniff"}]
     if tun:
         rules.append({"protocol": "dns", "action": "hijack-dns"})
-        rules.append({"process_name": ["ciadpi.exe"], "outbound": "direct"})
+        rules.append({"process_name": ["ciadpi" + EXE], "outbound": "direct"})
     rules.append({"ip_is_private": True, "outbound": "direct"})
     if region["domestic_suffixes"] and mode != "dpi":
         rules.append({"domain_suffix": region["domestic_suffixes"], "outbound": "direct"})
@@ -86,7 +105,13 @@ def build(region, mode, proxy_outbound=None, *, mixed_port=2080, dpi_port=1080, 
             rules.append({**dpi_match, "network": "udp", "port": 443, "action": "reject"})
             if region.get("resolve_dpi_via_doh") and doh:
                 rules.append({**dpi_match, "action": "resolve", "server": "doh"})
-            rules.append({**dpi_match, "outbound": "dpi"} if dpi_match else {"network": "tcp", "outbound": "dpi"})
+            target = dpi_match or {"network": "tcp"}
+            if singbox_dpi:
+                # Фрагментация на выходе direct: sing-box сам режет ClientHello на TLS-записи
+                rules.append({**target, "action": "route-options", **singbox_dpi})
+                rules.append({**target, "outbound": "direct"})
+            else:
+                rules.append({**target, "outbound": "dpi"})
 
     final = {"dpi": "direct", "vpn": "proxy", "hybrid": "direct"}[mode]
     return {

@@ -2,6 +2,8 @@
 
 Нужны Pillow и zxing-cpp (py -m pip install --user -r requirements.txt). Без них available() == False.
 """
+from .osinfo import MAC
+
 try:
     import zxingcpp
     from PIL import Image, ImageGrab
@@ -35,7 +37,9 @@ def decode(image):
 def from_screen():
     """Снимок всех мониторов. Окно приложения перед этим нужно убрать, чтобы не мешало."""
     _need()
-    return decode(ImageGrab.grab(all_screens=True))
+    # all_screens есть только в Windows; на macOS снимается основной экран, и нужно разрешение
+    # «Запись экрана» (Системные настройки → Конфиденциальность), иначе снимок будет пустым
+    return decode(ImageGrab.grab(all_screens=True) if not MAC else ImageGrab.grab())
 
 
 def from_file(path):

@@ -4,6 +4,7 @@
 событие в свою очередь, а не трогают tkinter напрямую.
 """
 from . import emblem
+from .osinfo import MAC
 
 try:
     import pystray
@@ -13,7 +14,8 @@ except ImportError:
 
 
 def available():
-    return pystray is not None
+    # На macOS pystray требует главный поток, а его занимает окно tkinter — трея на Mac пока нет
+    return pystray is not None and not MAC
 
 
 def _icon_image(eyes_open):
