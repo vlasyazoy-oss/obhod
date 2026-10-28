@@ -4,6 +4,7 @@
 событие в свою очередь, а не трогают tkinter напрямую.
 """
 from . import emblem
+from .i18n import t
 
 try:
     import pystray
@@ -26,12 +27,13 @@ class Tray:
         self.connected = False
         self._images = {True: _icon_image(True), False: _icon_image(False)}
         menu = pystray.Menu(
-            pystray.MenuItem("Показать окно", lambda: on_show(), default=True),  # default — двойной клик по значку
-            pystray.MenuItem(lambda item: "Отключить" if self.connected else "Подключить", lambda: on_toggle()),
+            # Подписи — функции: меню собирается заново после смены языка (update_menu)
+            pystray.MenuItem(lambda item: t("tray_show"), lambda: on_show(), default=True),  # default — двойной клик
+            pystray.MenuItem(lambda item: t("tray_disconnect" if self.connected else "tray_connect"), lambda: on_toggle()),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Выход", lambda: on_quit()),
+            pystray.MenuItem(lambda item: t("tray_quit"), lambda: on_quit()),
         )
-        self.icon = pystray.Icon("obhod", self._images[False], "Обход: не подключено", menu)
+        self.icon = pystray.Icon("obhod", self._images[False], f"{t('app')}: {t('tray_off')}", menu)
 
     def start(self):
         self.icon.run_detached()
@@ -39,12 +41,12 @@ class Tray:
     def set_state(self, connected, text):
         self.connected = connected
         self.icon.icon = self._images[connected]
-        self.icon.title = f"Обход: {text}"[:127]  # ограничение подсказки в Windows
+        self.icon.title = f"{t('app')}: {text}"[:127]  # ограничение подсказки в Windows
         self.icon.update_menu()
 
     def notify(self, message):
         try:
-            self.icon.notify(message, "Обход")
+            self.icon.notify(message, t("app"))
         except (NotImplementedError, OSError):
             pass
 

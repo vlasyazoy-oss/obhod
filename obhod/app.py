@@ -14,9 +14,10 @@ import tkinter as tk
 from urllib.parse import urlsplit
 from tkinter import filedialog, messagebox, ttk
 
-from core import autostart, autotest, config as cfg, emblem, keys, qr, region as reg, sysproxy, tray
+from core import autostart, autotest, blocks_ui, config as cfg, emblem, i18n, keys, qr, region as reg, sysproxy, tray
 from core.engine import DATA, Engine, EngineError, Log, missing_bins
 from core.fetch import FetchError, fetch
+from core.i18n import t
 from core.paths import BIN, launch_command
 from core.state import State
 from core.subscription import CertError, trusted_context
@@ -79,13 +80,15 @@ class App:
         self.log = Log(on_line=lambda line: self.q.put(("log", line)))
         self.engine = Engine(self.log)
         self.state = State.load()
+        i18n.set_lang(self.state.lang)
         self.regions = cfg.load_regions()
         self.detected, self.detected_how = reg.detect_offline()
         self.busy = False
         self._phase = 0.0
         self._reconnect_pending = False
+        self.game = None
 
-        root.title("Обход — администратор" if is_admin() else "Обход")
+        self._set_title()
         # Размеры в «логических» пикселях: при масштабе Windows 125–150 % окно не должно сжиматься
         self.k = root.winfo_fpixels("1i") / 96
         height = min(self.px(820), root.winfo_screenheight() - self.px(70))
@@ -111,12 +114,12 @@ class App:
         root.after(100, self._poll)
 
         if sysproxy.restore():
-            self.log.write("obhod", "системный прокси остался после прошлого сбоя — вернул прежние настройки")
+            self.log.write("obhod", t("log_proxy_restored"))
         if missing_bins():
-            self.log.write("obhod", "нет движков: " + ", ".join(missing_bins()))
+            self.log.write("obhod", t("log_no_engines", ", ".join(missing_bins())))
             root.after(300, self.ensure_engines)
         if not self.tray or not qr.available():
-            self.log.write("obhod", "трей и QR выключены: нет библиотек. Установите: py -m pip install --user -r requirements.txt")
+            self.log.write("obhod", t("log_no_libs"))
         autostart.refresh()
         if self.state.tun and not is_admin():
             root.after(400, self._offer_elevation)
@@ -160,14 +163,28 @@ class App:
         ttk.Label(f, text=title, style="Muted.TLabel").pack(anchor="w", pady=(0, 6))
         return f
 
+    def _set_title(self):
+        self.root.title(f"{t('app')} — {t('admin')}" if is_admin() else t("app"))
+
     def _build(self):
-        outer = ttk.Frame(self.root, padding=16)
+        self.outer = outer = ttk.Frame(self.root, padding=16)
         outer.pack(fill="both", expand=True)
 
         head = ttk.Frame(outer)
         head.pack(fill="x", pady=(0, 8))
-        ttk.Label(head, text="Обход", style="H.TLabel").pack(side="left")
-        ttk.Label(head, text=f"версия {VERSION}", style="Sub.TLabel").pack(side="left", padx=8, pady=(6, 0))
+        ttk.Label(head, text=t("app"), style="H.TLabel").pack(side="left")
+        ttk.Label(head, text=t("version", VERSION), style="Sub.TLabel").pack(side="left", padx=8, pady=(6, 0))
+        # Справа: язык и игра «Блоки»
+        self.lang_var = tk.StringVar(value=i18n.LANGS[i18n.lang])
+        lang_box = ttk.Combobox(head, textvariable=self.lang_var, values=list(i18n.LANGS.values()), state="readonly",
+                                width=9)
+        lang_box.pack(side="right", pady=(4, 0))
+        lang_box.bind("<<ComboboxSelected>>", self._on_lang)
+        game = tk.Canvas(head, width=self.px(80), height=self.px(26), bg=BG, highlightthickness=0, cursor="hand2")
+        game.pack(side="right", padx=(0, 10), pady=(4, 0))
+        blocks_ui.draw_icon(game, self.px(2), self.px(5), self.px(8))
+        game.create_text(self.px(30), self.px(13), text=t("game"), anchor="w", fill=FG, font=("Segoe UI", 9))
+        game.bind("<Button-1>", lambda e: self.open_game())
 
         # Эмблема — она же кнопка подключения
         mid = ttk.Frame(outer)
@@ -194,71 +211,71 @@ class App:
         self.root.bind_all("<MouseWheel>", lambda e: scroll.yview_scroll(-e.delta // 120, "units"))
 
         # Регион
-        c = self._card(body, "РЕГИОН")
+        c = self._card(body, t("card_region"))
         row = ttk.Frame(c, style="Card.TFrame")
         row.pack(fill="x")
         self.region_var = tk.StringVar()
         self.region_box = ttk.Combobox(row, textvariable=self.region_var, state="readonly", width=28)
         self.region_box.pack(side="left")
         self.region_box.bind("<<ComboboxSelected>>", self._on_region)
-        ttk.Button(row, text="По IP", command=self._detect_ip).pack(side="right")
+        ttk.Button(row, text=t("by_ip"), command=self._detect_ip).pack(side="right")
         self.region_hint = ttk.Label(c, style="Muted.TLabel", wraplength=self.px(410), justify="left")
         self.region_hint.pack(anchor="w", pady=(6, 0))
 
         # Режим
-        c = self._card(body, "РЕЖИМ")
+        c = self._card(body, t("card_mode"))
         self.mode_var = tk.StringVar()
         self.mode_buttons = {}
         row = ttk.Frame(c, style="Card.TFrame")
         row.pack(fill="x")
-        for code, title in cfg.MODES.items():
-            b = ttk.Radiobutton(row, text=title, value=code, variable=self.mode_var, command=self._on_mode)
+        for code in cfg.MODES:
+            b = ttk.Radiobutton(row, text=i18n.mode(code), value=code, variable=self.mode_var, command=self._on_mode)
             b.pack(side="left", padx=(0, 14))
             self.mode_buttons[code] = b
         self.mode_hint = ttk.Label(c, style="Muted.TLabel", wraplength=self.px(410), justify="left")
         self.mode_hint.pack(anchor="w", pady=(6, 0))
 
         # Ключи
-        c = self._card(body, "КЛЮЧИ И ПОДПИСКИ")
+        c = self._card(body, t("card_keys"))
         self.key_list = tk.Listbox(c, height=3, bg=BG, fg=FG, selectbackground=ACCENT, borderwidth=0,
                                    highlightthickness=0, activestyle="none", font=("Segoe UI", 10))
         self.key_list.pack(fill="x")
         self.key_list.bind("<<ListboxSelect>>", self._on_key_select)
         row = ttk.Frame(c, style="Card.TFrame")
         row.pack(fill="x", pady=(8, 0))
-        ttk.Button(row, text="Вставить", style="Accent.TButton", command=self.paste_key).pack(side="left")
-        self.qr_buttons = [ttk.Button(row, text="QR с экрана", command=self.scan_screen),
-                           ttk.Button(row, text="QR из файла", command=self.scan_file)]
+        ttk.Button(row, text=t("paste"), style="Accent.TButton", command=self.paste_key).pack(side="left")
+        self.qr_buttons = [ttk.Button(row, text=t("qr_screen"), command=self.scan_screen),
+                           ttk.Button(row, text=t("qr_file"), command=self.scan_file)]
         for b in self.qr_buttons:
             b.pack(side="left", padx=(6, 0))
             if not qr.available():
                 b.state(["disabled"])
-        ttk.Button(row, text="Удалить", command=self.delete_key).pack(side="right")
+        ttk.Button(row, text=t("delete"), command=self.delete_key).pack(side="right")
 
         # Стратегия
-        c = self._card(body, "ОБХОД DPI (BYEDPI)")
+        c = self._card(body, t("card_dpi"))
         row = ttk.Frame(c, style="Card.TFrame")
         row.pack(fill="x")
         self.strat_var = tk.StringVar()
         self.strat_box = ttk.Combobox(row, textvariable=self.strat_var, state="readonly", width=30)
         self.strat_box.pack(side="left")
         self.strat_box.bind("<<ComboboxSelected>>", self._on_strategy)
-        self.autotest_btn = ttk.Button(row, text="Автоподбор", command=self.run_autotest)
+        self.autotest_btn = ttk.Button(row, text=t("autotest"), command=self.run_autotest)
         self.autotest_btn.pack(side="right")
         self.tun_var = tk.BooleanVar()
         self.dpi_all_var = tk.BooleanVar()
-        ttk.Checkbutton(c, text="Все сайты через обход DPI, не только из списка", variable=self.dpi_all_var,
+        ttk.Checkbutton(c, text=t("dpi_all"), variable=self.dpi_all_var,
                         command=self._on_options).pack(anchor="w", pady=(8, 0))
-        ttk.Checkbutton(c, text="TUN: весь трафик системы (нужны права администратора)", variable=self.tun_var,
+        ttk.Checkbutton(c, text=t("tun"), variable=self.tun_var,
                         command=self._on_options).pack(anchor="w")
 
         # Запуск
-        c = self._card(body, "ЗАПУСК")
+        c = self._card(body, t("card_start"))
         self.autostart_var = tk.BooleanVar()
         self.connect_on_start_var = tk.BooleanVar()
-        ttk.Checkbutton(c, text="Запускать вместе с Windows (свёрнутым в трей)", variable=self.autostart_var,
+        ttk.Checkbutton(c, text=t("autostart"), variable=self.autostart_var,
                         command=self._on_autostart).pack(anchor="w")
-        ttk.Checkbutton(c, text="Подключаться сразу после запуска", variable=self.connect_on_start_var,
+        ttk.Checkbutton(c, text=t("connect_on_start"), variable=self.connect_on_start_var,
                         command=self._on_options).pack(anchor="w")
 
         # Журнал
@@ -297,23 +314,19 @@ class App:
     def _refresh_all(self):
         codes = ["auto", *self.regions]
         self._region_codes = codes
-        labels = [f"Авто: {self.regions[self.detected]['name']}"] + [self.regions[c]["name"] for c in self.regions]
+        labels = [t("auto", i18n.region(self.detected))] + [i18n.region(c) for c in self.regions]
         self.region_box["values"] = labels
         self.region_box.current(codes.index(self.state.region) if self.state.region in codes else 0)
         r = self.region()
-        hint = f"Определено: {self.detected_how}." if self.state.region == "auto" else ""
+        hint = t("detected", i18n.how(self.detected_how)) if self.state.region == "auto" else ""
         if r.get("dpi_note"):
-            hint += (" " if hint else "") + r["dpi_note"]
+            hint += (" " if hint else "") + cfg.region_note(r)
         self.region_hint.configure(text=hint)
 
         self.mode_var.set(self.mode())
         for code, b in self.mode_buttons.items():
             b.state(["!disabled"] if code == "vpn" or r["dpi_supported"] else ["disabled"])
-        self.mode_hint.configure(text={
-            "dpi": "Сайты из списка региона идут через локальный ByeDPI, остальное напрямую. Сервер не нужен.",
-            "vpn": "Весь трафик идёт через сервер по ключу, кроме сайтов своей страны и локальной сети.",
-            "hybrid": "Обход DPI для сайтов из списка, ключ для заблокированного по IP, остальное напрямую.",
-        }[self.mode()])
+        self.mode_hint.configure(text=t("hint_" + self.mode()))
 
         self.key_list.delete(0, "end")
         for k in self.state.keys:
@@ -322,7 +335,7 @@ class App:
             self.key_list.selection_set(min(self.state.selected_key, len(self.state.keys) - 1))
 
         strategies = r["strategies"]
-        self.strat_box["values"] = [s["name"] for s in strategies] or ["— не нужен в этом регионе —"]
+        self.strat_box["values"] = [i18n.strategy(s["name"]) for s in strategies] or [t("strategy_none")]
         cur = self.strategy()
         self.strat_box.current(strategies.index(cur) if cur else 0)
         self.autotest_btn.state(["!disabled"] if strategies and not self.busy else ["disabled"])
@@ -338,19 +351,50 @@ class App:
         look = math.sin(self._phase) if self.busy else 0.0
         emblem.draw(self.canvas, 0, 0, self.px(EMBLEM_W), eyes_open=on or self.busy, look=look)
         if on and not self.busy:
-            how = "TUN" if self.state.tun else f"системный прокси 127.0.0.1:{MIXED_PORT}"
-            self.status.configure(text=f"Подключено · {cfg.MODES[self.mode()]} · {how}", foreground=OK)
+            how = "TUN" if self.state.tun else t("sysproxy", f"127.0.0.1:{MIXED_PORT}")
+            self.status.configure(text=t("status_connected", i18n.mode(self.mode()), how), foreground=OK)
         elif not self.busy:
-            self.status.configure(text="Нажмите на эмблему, чтобы подключиться", foreground=MUTED)
-        if self.tray and not self.busy and self._tray_state != on:
-            self._tray_state = on
-            self.tray.set_state(on, f"подключено, {cfg.MODES[self.mode()]}" if on else "не подключено")
+            self.status.configure(text=t("status_idle"), foreground=MUTED)
+        tray_state = (on, i18n.lang)  # после смены языка подсказку и меню трея тоже обновляем
+        if self.tray and not self.busy and self._tray_state != tray_state:
+            self._tray_state = tray_state
+            self.tray.set_state(on, t("tray_on", i18n.mode(self.mode())) if on else t("tray_off"))
 
     # ---------- события ----------
     def _on_region(self, _=None):
         self.state.region = self._region_codes[self.region_box.current()]
         self.state.mode = ""
         self._changed()
+
+    def _on_lang(self, _=None):
+        """Новый язык — окно собирается заново; журнал сохраняется."""
+        code = next(c for c, name in i18n.LANGS.items() if name == self.lang_var.get())
+        if code == i18n.lang:
+            return
+        self.state.lang = i18n.set_lang(code)
+        self.state.save()
+        log = self.log_box.get("1.0", "end-1c")
+        self.outer.destroy()
+        self._set_title()
+        self._build()
+        self.log_box.configure(state="normal")
+        self.log_box.insert("end", log + ("\n" if log else ""))
+        self.log_box.see("end")
+        self.log_box.configure(state="disabled")
+        self._refresh_all()
+        if self.game and self.game.alive():
+            self.game.relabel()
+        self.log.write("obhod", t("log_lang", i18n.LANGS[code]))
+
+    def open_game(self):
+        if self.game and self.game.alive():
+            self.game.show()
+            return
+        self.game = blocks_ui.BlocksWindow(self.root, self.k, best=self.state.blocks_best, on_best=self._on_best)
+
+    def _on_best(self, score):
+        self.state.blocks_best = score
+        self.state.save()
 
     def _on_mode(self):
         self.state.mode = self.mode_var.get()
@@ -365,8 +409,7 @@ class App:
     def _on_options(self):
         if self.tun_var.get() and not is_admin():
             self.tun_var.set(False)
-            if messagebox.askyesno("Обход", "Для режима TUN нужны права администратора.\n\n"
-                                            "Перезапустить Обход от имени администратора?", parent=self.root):
+            if messagebox.askyesno(t("app"), t("tun_need_admin"), parent=self.root):
                 self.state.tun = True
                 self.state.save()
                 if relaunch_as_admin():
@@ -374,7 +417,7 @@ class App:
                     return
                 self.state.tun = False
                 self.state.save()
-                self.log.write("obhod", "перезапуск от администратора отменён — TUN выключен")
+                self.log.write("obhod", t("log_elev_cancelled"))
             return
         reconnect = self.state.tun != self.tun_var.get() or self.state.dpi_all != self.dpi_all_var.get()
         self.state.tun = self.tun_var.get()
@@ -384,27 +427,25 @@ class App:
 
     def _offer_elevation(self):
         """TUN включён в настройках, а запустили без прав администратора: предложить перезапуск сразу."""
-        if messagebox.askyesno("Обход", "Включён режим TUN, для него нужны права администратора.\n\n"
-                                        "Перезапустить Обход от имени администратора?\n"
-                                        "«Нет» — выключить TUN и работать через системный прокси.", parent=self.root):
+        if messagebox.askyesno(t("app"), t("tun_offer"), parent=self.root):
             if relaunch_as_admin():
                 self.quit()
                 return
         self.state.tun = False
         self.state.save()
-        self.log.write("obhod", "TUN выключен: нет прав администратора")
+        self.log.write("obhod", t("log_tun_off"))
         self._refresh_all()
 
     def _on_autostart(self):
         try:
             if self.autostart_var.get():
                 autostart.enable()
-                self.log.write("obhod", "автозапуск включён: " + autostart.command())
+                self.log.write("obhod", t("log_autostart_on", autostart.command()))
             else:
                 autostart.disable()
-                self.log.write("obhod", "автозапуск выключен")
+                self.log.write("obhod", t("log_autostart_off"))
         except OSError as e:
-            self.log.write("ошибка", f"не удалось изменить автозапуск: {e}")
+            self.log.write(t("tag_error"), t("log_autostart_fail", e))
         self._refresh_all()
 
     def _on_key_select(self, _=None):
@@ -422,7 +463,7 @@ class App:
             self._reconnect_pending = True
             return
         if reconnect and self.engine.running:
-            self.log.write("obhod", "настройки изменились — переподключаюсь")
+            self.log.write("obhod", t("log_reconnect"))
             self._in_thread(self._connect)
 
     def _detect_ip(self):
@@ -443,9 +484,9 @@ class App:
             return
         texts = qr.from_clipboard() if qr.available() else None
         if texts is None:
-            self.log.write("obhod", "в буфере обмена нет ни текста, ни картинки")
+            self.log.write("obhod", t("log_clipboard_empty"))
         else:
-            self._import_texts(texts, source="картинке из буфера")
+            self._import_texts(texts, source=t("src_clipboard"))
 
     def scan_screen(self):
         """Прячем окно, снимаем все мониторы, ищем QR."""
@@ -460,12 +501,12 @@ class App:
                     texts = qr.from_screen()
             finally:
                 self.root.deiconify()
-            self._import_texts(texts, source="экране")
+            self._import_texts(texts, source=t("src_screen"))
         self.root.after(300, lambda: self._guard(grab))
 
     def scan_file(self):
-        path = filedialog.askopenfilename(title="Картинка с QR-кодом ключа", filetypes=[
-            ("Картинки", "*.png *.jpg *.jpeg *.bmp *.gif *.webp"), ("Все файлы", "*.*")])
+        path = filedialog.askopenfilename(title=t("qr_dialog"), filetypes=[
+            (t("images"), "*.png *.jpg *.jpeg *.bmp *.gif *.webp"), (t("all_files"), "*.*")])
         if path:
             self._guard(lambda: self._import_texts(qr.from_file(path), source=os.path.basename(path)))
 
@@ -473,14 +514,14 @@ class App:
         try:
             fn()
         except (qr.QRError, OSError, ValueError) as e:
-            self.log.write("ошибка", str(e))
+            self.log.write(t("tag_error"), str(e))
 
     def _import_texts(self, texts, source=""):
         if source and not texts:
-            self.log.write("obhod", f"на {source} не нашёл QR-кода")
+            self.log.write("obhod", t("log_qr_none", source))
             return
         if source:
-            self.log.write("obhod", f"QR-кодов на {source}: {len(texts)}")
+            self.log.write("obhod", t("log_qr_found", source, len(texts)))
         for text in texts:
             text = text.strip()
             if text.startswith(("http://", "https://")):
@@ -491,7 +532,7 @@ class App:
     def _fetch_sub(self, url, pinned=None):
         """Скачать подписку в фоне. Сертификат не подтвердился — спросить пользователя в главном потоке."""
         pinned = pinned or self.state.trusted_certs.get(urlsplit(url).hostname or "")
-        self.log.write("obhod", "скачиваю подписку…")
+        self.log.write("obhod", t("log_sub_loading"))
 
         def work():
             try:
@@ -505,28 +546,22 @@ class App:
     def _ask_cert(self, url, e):
         """Сертификат сервера подписки не подтверждён: объяснить и дать решить. «Да» запоминает отпечаток —
         подписка с другого (подменённого) сертификата снова вызовет этот вопрос."""
-        self.log.write("obhod", f"сертификат {e.host} не подтверждён: {e.reason}")
+        self.log.write("obhod", t("log_cert", e.host, e.reason))
         if not e.fingerprint:
-            messagebox.showerror("Обход", f"Не удалось проверить сервер подписки {e.host}: {e.reason}.", parent=self.root)
+            messagebox.showerror(t("app"), t("cert_fail", e.host, e.reason), parent=self.root)
             return
-        text = (f"Сервер подписки {e.host} не подтвердил свою подлинность:\n{e.reason.rstrip('.')}.\n\n"
-                "Так бывает, если у сервера самоподписанный сертификат или если сеть подменяет сертификаты "
-                "(корпоративный фильтр, антивирус).\n\n"
-                f"Отпечаток сертификата (SHA-256):\n{e.fingerprint}\n\n"
-                "Доверяйте, только если уверены в сервере — например, отпечаток совпадает с указанным в панели "
-                "вашего VPN. В подменённой подписке могут оказаться чужие ключи, и трафик уйдёт на чужой сервер.\n\n"
-                "Доверять этому сертификату и скачать подписку?")
-        if messagebox.askyesno("Обход — сертификат не подтверждён", text, icon="warning", default="no", parent=self.root):
+        text = t("cert_text", e.host, e.reason.rstrip("."), e.fingerprint)
+        if messagebox.askyesno(t("cert_title"), text, icon="warning", default="no", parent=self.root):
             self.state.trusted_certs[e.host] = e.fingerprint
             self.state.save()
-            self.log.write("obhod", f"доверяю сертификату {e.host}: {e.fingerprint[:23]}…")
+            self.log.write("obhod", t("log_cert_trusted", e.host, e.fingerprint[:23]))
             self._fetch_sub(url, pinned=e.fingerprint)
         else:
-            self.log.write("obhod", "подписка не загружена: сертификат не подтверждён")
+            self.log.write("obhod", t("log_sub_rejected"))
 
     def _add_keys(self, found, errors, sub=""):
         for e in errors:
-            self.log.write("obhod", "не разобрал ключ: " + e)
+            self.log.write("obhod", t("log_bad_key", e))
         self.q.put(("keys", [{"name": k.name, "uri": k.uri, "outbound": k.outbound, "sub": sub} for k in found]))
 
     def delete_key(self):
@@ -544,15 +579,13 @@ class App:
             return True
         if self.root.state() == "withdrawn":
             self.root.deiconify()
-        if not messagebox.askyesno("Обход", "Для работы нужны движки: " + ", ".join(missing) + ".\n\n"
-                                   "Скачать их с официальных страниц GitHub (sing-box и ByeDPI, около 35 МБ)?\n"
-                                   f"Они будут лежать в {BIN}", parent=self.root):
-            self.log.write("obhod", f"без движков подключиться нельзя. Можно положить их в {BIN} вручную")
+        if not messagebox.askyesno(t("app"), t("engines_ask", ", ".join(missing), BIN), parent=self.root):
+            self.log.write("obhod", t("log_engines_manual", BIN))
             return False
 
         def work():
-            fetch(log=lambda m: self.log.write("загрузка", m))
-            self.log.write("obhod", "движки на месте")
+            fetch(log=lambda m: self.log.write(t("tag_download"), m))
+            self.log.write("obhod", t("log_engines_ready"))
             if then:
                 then()
         self._in_thread(work)
@@ -569,8 +602,7 @@ class App:
 
     def _connect(self):
         if self.state.tun and not is_admin():
-            raise cfg.ConfigError("TUN включён, но Обход запущен без прав администратора. "
-                                  "Снимите галочку TUN или включите её снова — Обход предложит перезапуск.")
+            raise cfg.ConfigError(t("err_tun_admin"))
         r = self.region()
         key = self.state.current_key()
         conf = cfg.build(r, self.mode(), key["outbound"] if key else None, mixed_port=MIXED_PORT,
@@ -579,13 +611,13 @@ class App:
         if not self.state.tun:
             sysproxy.enable(MIXED_PORT)
         flush_dns()
-        self.log.write("obhod", f"подключено: {r['name']}, {cfg.MODES[self.mode()]}")
+        self.log.write("obhod", t("log_connected", i18n.region(self.region_code()), i18n.mode(self.mode())))
 
     def _disconnect(self):
         self.engine.stop()
         sysproxy.restore()
         flush_dns()
-        self.log.write("obhod", "отключено")
+        self.log.write("obhod", t("log_disconnected"))
 
     def run_autotest(self):
         was_running = self.engine.running
@@ -594,18 +626,18 @@ class App:
             if was_running:
                 self._disconnect()
             r = self.region()
-            say = lambda m: self.log.write("тест", m)
-            say(f"автоподбор для региона «{r['name']}»")
+            say = lambda m: self.log.write(t("tag_test"), m)
+            say(t("test_region", i18n.region(self.region_code())))
             blocked = autotest.baseline(r, say)
             if not blocked:
-                say("все тестовые сайты открываются напрямую — проверяю стратегии на полном списке")
+                say(t("test_all_open"))
             results = autotest.run(r, say, urls=blocked or None)
             if results and results[0][1] > 0:
                 best = results[0][0]
                 self.state.strategies[self.region_code()] = best["id"]
-                say(f"выбрана: {best['name']}")
+                say(t("test_chosen", i18n.strategy(best["name"])))
             else:
-                say("ни одна стратегия не помогла. Нужен ключ (режим «VPN по ключу» или «Гибрид»).")
+                say(t("test_none"))
             self.state.save()
             if was_running:
                 self._connect()
@@ -616,13 +648,13 @@ class App:
         if busy:
             self.busy = True
             self._refresh_all()
-            self.status.configure(text="Работаю…", foreground=MUTED)
+            self.status.configure(text=t("working"), foreground=MUTED)
 
         def run():
             try:
                 fn()
             except (cfg.ConfigError, EngineError, FetchError, keys.KeyParseError, OSError, ValueError) as e:
-                self.log.write("ошибка", str(e))
+                self.log.write(t("tag_error"), str(e))
                 self.q.put(("error", str(e)))
             finally:
                 if busy:
@@ -644,7 +676,7 @@ class App:
                     if data:
                         self.state.keys.extend(data)
                         self.state.selected_key = len(self.state.keys) - len(data)
-                        self.log.write("obhod", f"добавлено ключей: {len(data)}")
+                        self.log.write("obhod", t("log_keys_added", len(data)))
                         self._changed()
                 elif kind == "cert":
                     self._ask_cert(*data)
@@ -674,7 +706,7 @@ class App:
         except queue.Empty:
             pass
         if not self.busy and self.engine.procs and not self.engine.running:
-            self.log.write("obhod", "движок остановился сам — снимаю системный прокси")
+            self.log.write("obhod", t("log_engine_died"))
             self.engine.stop()
             sysproxy.restore()
             self._refresh_all()
@@ -690,11 +722,13 @@ class App:
             return
         self.root.withdraw()
         if not self.state.tray_hint_shown:
-            self.tray.notify("Обход работает в трее. Выход — правой кнопкой по значку.")
+            self.tray.notify(t("tray_hint"))
             self.state.tray_hint_shown = True
             self.state.save()
 
     def quit(self):
+        if self.game and self.game.alive():
+            self.game.close()
         self.engine.stop()
         sysproxy.restore()
         if self.tray:
@@ -751,7 +785,8 @@ def main():
     except (AttributeError, OSError):
         pass
     if already_running(wait=8 if "--elevated" in sys.argv else 0):
-        ctypes.windll.user32.MessageBoxW(None, "Обход уже запущен — его значок в трее, рядом с часами.", "Обход", 0x40)
+        i18n.set_lang(State.load().lang)
+        ctypes.windll.user32.MessageBoxW(None, t("already_running"), t("app"), 0x40)
         return
     root = tk.Tk()
     App(root, start_hidden="--tray" in sys.argv)

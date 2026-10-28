@@ -2,6 +2,8 @@
 
 Нужны Pillow и zxing-cpp (py -m pip install --user -r requirements.txt). Без них available() == False.
 """
+from .i18n import t
+
 try:
     import zxingcpp
     from PIL import Image, ImageGrab
@@ -19,7 +21,7 @@ def available():
 
 def _need():
     if not available():
-        raise QRError("Для QR нужны библиотеки: py -m pip install --user -r requirements.txt")
+        raise QRError(t("err_qr_libs"))
 
 
 def decode(image):

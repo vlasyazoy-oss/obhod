@@ -5,6 +5,7 @@ import urllib.request
 import zipfile
 
 from .paths import BIN
+from .i18n import t
 
 SING_BOX = "1.14.4"
 BYEDPI = "0.17.3"
@@ -27,20 +28,19 @@ def fetch(log=print, force=False):
         target = os.path.join(BIN, wanted)
         if os.path.exists(target) and not force:
             continue
-        log(f"скачиваю {url.rsplit('/', 1)[-1]}…")
+        log(t("fetch_get", url.rsplit("/", 1)[-1]))
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "obhod"})
             with urllib.request.urlopen(req, timeout=180) as r:
                 data = r.read()
         except OSError as e:
-            raise FetchError(f"не удалось скачать {wanted}: {e}. Если GitHub заблокирован, подключите обход "
-                             f"другим способом или положите файл в {BIN} вручную") from e
+            raise FetchError(t("err_fetch", wanted, e, BIN)) from e
         with zipfile.ZipFile(io.BytesIO(data)) as z:
             name = next((n for n in z.namelist() if os.path.basename(n).lower() == wanted), None)
             if not name:
-                raise FetchError(f"в архиве нет {wanted}")
+                raise FetchError(t("err_not_in_archive", wanted))
             tmp = target + ".part"
             with open(tmp, "wb") as f:
                 f.write(z.read(name))
             os.replace(tmp, target)
-        log(f"готово: {wanted}")
+        log(t("fetch_done", wanted))

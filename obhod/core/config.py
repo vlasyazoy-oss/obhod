@@ -4,6 +4,9 @@ import json
 import os
 
 from .paths import RES
+from . import i18n
+from .i18n import t
+
 MODES = {"dpi": "Обход DPI", "vpn": "VPN по ключу", "hybrid": "Гибрид"}
 
 
@@ -13,7 +16,18 @@ class ConfigError(ValueError):
 
 def load_regions(path=os.path.join(RES, "core", "regions.json")):
     with open(path, encoding="utf-8") as f:
-        return json.load(f)
+        regions = json.load(f)
+    for code, r in regions.items():
+        r["code"] = code
+    return regions
+
+
+def region_note(region):
+    """Заметка региона на языке интерфейса (в regions.json она по-русски)."""
+    if not region.get("dpi_note"):
+        return ""
+    key = "note_" + region.get("code", "")
+    return t(key) if key in i18n.STRINGS else region["dpi_note"]
 
 
 def default_mode(region, has_key):
@@ -30,9 +44,9 @@ def build(region, mode, proxy_outbound=None, *, mixed_port=2080, dpi_port=1080, 
     uses_proxy = mode in ("vpn", "hybrid")
     uses_dpi = mode in ("dpi", "hybrid")
     if uses_proxy and not proxy_outbound:
-        raise ConfigError("Для этого режима нужен ключ: вставьте ссылку vless://, hy2://, trojan://, ss:// или подписку.")
+        raise ConfigError(t("err_need_key"))
     if uses_dpi and not region["dpi_supported"]:
-        raise ConfigError(region.get("dpi_note") or "В этом регионе обход DPI не работает, нужен ключ.")
+        raise ConfigError(region_note(region) or t("err_no_dpi"))
 
     doh = region.get("doh")
     dns_servers = [{"type": "local", "tag": "local"}]

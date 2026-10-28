@@ -20,6 +20,8 @@ class State:
     connect_on_start: bool = False
     tray_hint_shown: bool = False
     trusted_certs: dict = field(default_factory=dict)  # сервер подписки -> отпечаток, которому доверился пользователь
+    lang: str = ""                       # язык интерфейса; пусто — по языку Windows
+    blocks_best: int = 0                 # рекорд в игре «Блоки»
 
     @classmethod
     def load(cls):

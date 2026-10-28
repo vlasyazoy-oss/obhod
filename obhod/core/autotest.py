@@ -9,6 +9,8 @@ import time
 
 from . import config as cfg
 from .engine import CIADPI, NO_WINDOW
+from . import i18n
+from .i18n import t
 
 CURL = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "curl.exe")
 TEST_PORT = 1090
@@ -31,7 +33,7 @@ def baseline(region, log):
     blocked = []
     for url in region["test_urls"]:
         ok = probe(url)
-        log(f"напрямую {url}: {'открылся' if ok else 'не открылся'}")
+        log(t("test_direct", url, t("test_opened" if ok else "test_failed")))
         if not ok:
             blocked.append(url)
     return blocked
@@ -42,7 +44,7 @@ def run(region, log, urls=None, stop=lambda: False):
     urls = urls or region["test_urls"]
     doh = region.get("doh") if region.get("resolve_dpi_via_doh") else None
     if doh:
-        log(f"имена резолвлю через DoH {doh}: DNS провайдера в этом регионе подменяет адреса")
+        log(t("test_doh", doh))
     results = []
     for strategy in region["strategies"]:
         if stop():
@@ -52,10 +54,10 @@ def run(region, log, urls=None, stop=lambda: False):
         try:
             time.sleep(0.5)
             if proc.poll() is not None:
-                log(f"✗ {strategy['name']}: ByeDPI не принял параметры")
+                log(f"✗ {i18n.strategy(strategy['name'])}: {t('test_bad_args')}")
                 continue
             ok = sum(probe(u, TEST_PORT, doh=doh) for u in urls)
-            log(f"{'✓' if ok == len(urls) else '·'} {strategy['name']}: {ok}/{len(urls)}")
+            log(f"{'✓' if ok == len(urls) else '·'} {i18n.strategy(strategy['name'])}: {ok}/{len(urls)}")
             results.append((strategy, ok))
             if ok == len(urls):
                 break  # все сайты открылись — дальше не ищем

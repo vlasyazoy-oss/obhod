@@ -13,6 +13,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
+from .i18n import t
 from .version import VERSION
 
 HEADERS = {"User-Agent": f"obhod/{VERSION}"}
@@ -84,14 +85,14 @@ def _download_pinned(url, timeout, pinned):
         conn.connect()
         actual = fingerprint(conn.sock.getpeercert(binary_form=True))
         if actual != pinned:
-            raise CertError(url, u.hostname, port, actual, "отпечаток сертификата изменился с прошлого раза")
+            raise CertError(url, u.hostname, port, actual, t("err_cert_changed"))
         path = (u.path or "/") + (f"?{u.query}" if u.query else "")
         conn.request("GET", path, headers={**HEADERS, "Host": u.netloc})
         r = conn.getresponse()
         if 300 <= r.status < 400:
-            raise ValueError(f"подписка перенаправляет на {r.getheader('Location')} — вставьте этот адрес")
+            raise ValueError(t("err_sub_redirect", r.getheader("Location")))
         if r.status >= 400:
-            raise ValueError(f"сервер подписки ответил {r.status} {r.reason}")
+            raise ValueError(t("err_sub_status", r.status, r.reason))
         return r.read(), r.headers
     finally:
         conn.close()

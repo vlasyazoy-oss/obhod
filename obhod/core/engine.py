@@ -12,6 +12,7 @@ import time
 from . import config as cfg
 
 from .paths import BIN, DATA
+from .i18n import t
 SING_BOX = os.path.join(BIN, "sing-box.exe")
 CIADPI = os.path.join(BIN, "ciadpi.exe")
 LOG_FILE = os.path.join(DATA, "obhod.log")
@@ -82,7 +83,7 @@ def check_config(conf):
         json.dump(conf, f, ensure_ascii=False, indent=2)
     r = subprocess.run([SING_BOX, "check", "-c", path], capture_output=True, creationflags=NO_WINDOW)
     if r.returncode != 0:
-        raise EngineError("sing-box отклонил конфиг: " + (r.stderr or r.stdout).decode("utf-8", "replace").strip())
+        raise EngineError(t("err_config", (r.stderr or r.stdout).decode("utf-8", "replace").strip()))
     return path
 
 
@@ -104,16 +105,16 @@ class Engine:
 
     def _start(self, conf, strategy, dpi_port):
         if missing_bins():
-            raise EngineError("нет движков: " + ", ".join(missing_bins()) + ". Запустите scripts/fetch_bins.py")
+            raise EngineError(t("err_no_engines", ", ".join(missing_bins())))
         was_tun = self.stop()
         killed = kill_orphans()
         if killed:
-            self.log.write("obhod", f"закрыл оставшиеся от прошлого запуска движки: {killed}")
+            self.log.write("obhod", t("log_orphans", killed))
             time.sleep(0.3)
         path = check_config(conf)
         if any(o["tag"] == "dpi" for o in conf["outbounds"]):
             if not strategy:
-                raise EngineError("не выбрана стратегия обхода DPI")
+                raise EngineError(t("err_no_strategy"))
             conn_ip = None
             if any(i["type"] == "tun" for i in conf["inbounds"]):
                 # Соединения ByeDPI не должны попасть в TUN: sing-box пересобрал бы TCP-поток, и разрезы,
@@ -123,7 +124,7 @@ class Engine:
                     time.sleep(0.5)  # дать старому TUN исчезнуть из таблицы маршрутов
                 conn_ip = physical_ip()
                 if not conn_ip:
-                    raise EngineError("не нашёл адрес сетевой карты для ByeDPI — TUN с обходом DPI не запустить")
+                    raise EngineError(t("err_no_nic"))
             self.log.write("obhod", f"ByeDPI: {strategy['name']} ({' '.join(strategy['args'])})"
                            + (f", мимо TUN через {conn_ip}" if conn_ip else ""))
             self.procs["ciadpi"] = _spawn([CIADPI, *cfg.ciadpi_args(strategy, dpi_port, conn_ip)], "byedpi", self.log)
@@ -132,7 +133,7 @@ class Engine:
         dead = [n for n, p in self.procs.items() if p.poll() is not None]
         if dead:
             self.stop()
-            raise EngineError(f"движок завершился сразу после запуска: {', '.join(dead)} (подробности в журнале)")
+            raise EngineError(t("err_died", ", ".join(dead)))
 
     def stop(self):
         """Останавливает движки. True, если работал sing-box (с TUN его адаптер исчезает вместе с процессом)."""

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from . import subscription
+from .i18n import t
 
 SCHEMES = ("vless", "vmess", "trojan", "ss", "hy2", "hysteria2", "tuic")
 
@@ -48,7 +49,7 @@ def _port(u):
     except ValueError:
         port = None
     if not port:
-        raise KeyParseError("в ключе нет порта")
+        raise KeyParseError(t("err_key_port"))
     return port
 
 
@@ -66,7 +67,7 @@ def _tls(q, sni_default, force=False):
         tls["utls"] = {"enabled": True, "fingerprint": fp or "chrome"}
     if security == "reality":
         if not q.get("pbk"):
-            raise KeyParseError("в Reality-ключе нет публичного ключа (pbk)")
+            raise KeyParseError(t("err_key_pbk"))
         tls["reality"] = {"enabled": True, "public_key": q["pbk"], "short_id": q.get("sid", "")}
     return tls
 
@@ -76,23 +77,23 @@ def _transport(net, host, path, service_name=""):
     if net in ("tcp", "raw", ""):
         return None
     if net == "ws":
-        t = {"type": "ws", "path": path or "/"}
+        transport = {"type": "ws", "path": path or "/"}
         if host:
-            t["headers"] = {"Host": host}
-        return t
+            transport["headers"] = {"Host": host}
+        return transport
     if net == "grpc":
         return {"type": "grpc", "service_name": service_name or path or ""}
     if net in ("http", "h2"):
-        t = {"type": "http", "path": path or "/"}
+        transport = {"type": "http", "path": path or "/"}
         if host:
-            t["host"] = [h for h in host.split(",") if h]
-        return t
+            transport["host"] = [h for h in host.split(",") if h]
+        return transport
     if net == "httpupgrade":
-        t = {"type": "httpupgrade", "path": path or "/"}
+        transport = {"type": "httpupgrade", "path": path or "/"}
         if host:
-            t["host"] = host
-        return t
-    raise KeyParseError(f"транспорт «{net}» пока не поддерживается (sing-box его не умеет)")
+            transport["host"] = host
+        return transport
+    raise KeyParseError(t("err_key_transport", net))
 
 
 def _vless(u, q):
@@ -124,7 +125,7 @@ def _vmess(body):
     try:
         d = json.loads(_b64(body))
     except (ValueError, binascii.Error) as e:
-        raise KeyParseError("vmess-ключ не похож на base64 JSON") from e
+        raise KeyParseError(t("err_key_vmess")) from e
     ob = {
         "type": "vmess",
         "server": d["add"],
@@ -146,7 +147,7 @@ def _ss(rest, q):
     # SIP002: ss://base64(method:password)@host:port  или  ss://method:password@host:port (2022-шифры)
     # Старый формат: ss://base64(method:password@host:port)
     if "plugin" in q:
-        raise KeyParseError("ss с плагином (obfs/v2ray-plugin) пока не поддерживается")
+        raise KeyParseError(t("err_key_ss_plugin"))
     if "@" not in rest:
         rest = _b64(rest)
     userinfo, _, hostport = rest.rpartition("@")
@@ -159,7 +160,7 @@ def _ss(rest, q):
     method, _, password = creds.partition(":")
     u = urlsplit("//" + hostport)
     if not method or not password:
-        raise KeyParseError("в ss-ключе нет метода или пароля")
+        raise KeyParseError(t("err_key_ss"))
     return {"type": "shadowsocks", "server": u.hostname, "server_port": _port(u), "method": method, "password": password}
 
 
@@ -201,7 +202,7 @@ def parse_key(uri):
     scheme, sep, rest = uri.partition("://")
     scheme = scheme.lower()
     if not sep or scheme not in SCHEMES:
-        raise KeyParseError(f"неизвестный формат ключа: {uri[:30]}…")
+        raise KeyParseError(t("err_key_format", uri[:30]))
     rest, _, frag = rest.partition("#")
     name = unquote(frag)
     if scheme == "vmess":
@@ -215,7 +216,7 @@ def parse_key(uri):
         else:
             u = urlsplit(f"{scheme}://{body}")
             if not u.hostname:
-                raise KeyParseError("в ключе нет адреса сервера")
+                raise KeyParseError(t("err_key_host"))
             ob = {"vless": _vless, "trojan": _trojan, "hy2": _hy2, "hysteria2": _hy2, "tuic": _tuic}[scheme](u, q)
     ob["tag"] = "proxy"
     return Key(name=name or f'{ob["type"]} {ob["server"]}', uri=uri, outbound=ob)
